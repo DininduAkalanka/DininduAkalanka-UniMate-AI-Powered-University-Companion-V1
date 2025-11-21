@@ -29,22 +29,25 @@ import {
   EmptyState,
   QuickActions,
   ScrollToBottomButton,
-} from '../components/chat';
-import { COLORS } from '../constants/config';
-import { ILLUSTRATIONS } from '../constants/illustrations';
+} from '../../components/chat';
+import { COLORS } from '../../constants/config';
+import { ILLUSTRATIONS } from '../../constants/illustrations';
 import {
-  generateAIResponse,
-  summarizeText,
-  explainConcept,
-  getStudyTips,
   answerQuestion,
-  resetConversation,
-  testConnection,
-} from '../services/aiServiceEnhanced';
-import { getCurrentUser } from '../services/authService';
+  explainConcept,
+  generateAIResponse,
+  getStudyTips,
+  summarizeText,
+  testConnection
+} from '../../services/aiServiceEnhanced';
+import { getCurrentUser } from '../../services/authService';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+// Enable LayoutAnimation on Android (only for old architecture)
+if (
+  Platform.OS === 'android' && 
+  UIManager.setLayoutAnimationEnabledExperimental &&
+  !(global as any).nativeFabricUIManager // Check if NOT using new architecture
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -376,7 +379,7 @@ export default function AIChatScreen() {
       <KeyboardAvoidingView
         style={styles.chatContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
       >
         {messages.length === 0 ? (
           <View style={styles.emptyStateContainer}>
@@ -441,6 +444,7 @@ export default function AIChatScreen() {
           onAttachImage={handleImagePick}
           onAttachDocument={handleDocumentPick}
           disabled={typing}
+          isLoading={typing}
         />
       </KeyboardAvoidingView>
     </View>
@@ -532,6 +536,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
   },
   quickActionsWrapper: {
     position: 'absolute',

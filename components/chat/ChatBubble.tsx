@@ -1,12 +1,14 @@
 /**
- * ChatBubble Component
- * Modern message bubble following OpenAI/ChatGPT design patterns
- * Supports markdown, code blocks, animations, and accessibility
+ * ChatBubble Component - Modern AI Chat Interface
+ * Inspired by ChatGPT, Claude, Gemini designs
+ * Optimized for university students with clear, readable responses
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef } from 'react';
-import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../../constants/config';
 
 export interface ChatBubbleProps {
@@ -27,18 +29,19 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onLongPress,
 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(15)).current;
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
     ]).start();
@@ -52,99 +55,161 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     });
   };
 
+  const handleCopy = async () => {
+    await Clipboard.setStringAsync(message);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const renderMessageContent = () => {
     if (isTyping) {
       return <TypingIndicator />;
     }
 
-    // Basic markdown rendering (bold, italic, code)
+    // Enhanced markdown rendering with better formatting
     const renderFormattedText = () => {
-      const parts = message.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+      // Split by code blocks first
+      const codeBlockRegex = /```([\s\S]*?)```/g;
+      const parts = message.split(codeBlockRegex);
       
-      return (
-        <Text style={[styles.messageText, isUser && styles.messageTextUser]}>
-          {parts.map((part, index) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-              return (
-                <Text key={index} style={styles.boldText}>
-                  {part.slice(2, -2)}
-                </Text>
-              );
-            } else if (part.startsWith('*') && part.endsWith('*')) {
-              return (
-                <Text key={index} style={styles.italicText}>
-                  {part.slice(1, -1)}
-                </Text>
-              );
-            } else if (part.startsWith('`') && part.endsWith('`')) {
-              return (
-                <Text key={index} style={styles.codeText}>
-                  {part.slice(1, -1)}
-                </Text>
-              );
-            }
-            return part;
-          })}
-        </Text>
-      );
+      return parts.map((part, index) => {
+        // Code block (every odd index after split)
+        if (index % 2 === 1) {
+          return (
+            <View key={index} style={styles.codeBlock}>
+              <Text style={styles.codeBlockText}>{part.trim()}</Text>
+            </View>
+          );
+        }
+
+        // Regular text with inline markdown
+        const inlineParts = part.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`|(?:^|\n)(?:•|-|\d+\.)\s+.*$)/gm);
+        
+        return (
+          <Text key={index} style={[styles.messageText, isUser && styles.messageTextUser]}>
+            {inlineParts.map((inlinePart, i) => {
+              // Bold
+              if (inlinePart.startsWith('**') && inlinePart.endsWith('**')) {
+                return (
+                  <Text key={i} style={styles.boldText}>
+                    {inlinePart.slice(2, -2)}
+                  </Text>
+                );
+              }
+              // Italic
+              else if (inlinePart.startsWith('*') && inlinePart.endsWith('*')) {
+                return (
+                  <Text key={i} style={styles.italicText}>
+                    {inlinePart.slice(1, -1)}
+                  </Text>
+                );
+              }
+              // Inline code
+              else if (inlinePart.startsWith('`') && inlinePart.endsWith('`')) {
+                return (
+                  <Text key={i} style={styles.inlineCode}>
+                    {inlinePart.slice(1, -1)}
+                  </Text>
+                );
+              }
+              // List items
+              else if (/^(?:•|-|\d+\.)\s+/.test(inlinePart.trim())) {
+                return (
+                  <Text key={i} style={styles.listItem}>
+                    {'\n'}{inlinePart.trim()}
+                  </Text>
+                );
+              }
+              return inlinePart;
+            })}
+          </Text>
+        );
+      });
     };
 
     return renderFormattedText();
   };
 
+  if (isUser) {
+    // User message - Clean, modern bubble
+    return (
+      <Animated.View
+        style={[
+          styles.container,
+          styles.userContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <View style={styles.userBubble}>
+          <Text style={styles.userMessageText}>{message}</Text>
+        </View>
+        <Text style={styles.userTimestamp}>{formatTime(timestamp)}</Text>
+      </Animated.View>
+    );
+  }
+
+  // AI message - Card-style with actions (ChatGPT/Claude style)
   return (
     <Animated.View
       style={[
         styles.container,
-        isUser ? styles.userContainer : styles.aiContainer,
+        styles.aiContainer,
         {
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }],
         },
       ]}
     >
-      <View style={[styles.bubbleRow, isUser && styles.bubbleRowReverse]}>
-        {!isUser && avatar && (
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>{avatar}</Text>
+      <View style={styles.aiCard}>
+        {/* AI Avatar */}
+        <View style={styles.aiHeader}>
+          <View style={styles.aiAvatar}>
+            <Ionicons name="sparkles" size={18} color="#8B5CF6" />
+          </View>
+          <Text style={styles.aiLabel}>UniMate AI</Text>
+          <Text style={styles.aiTimestamp}>{formatTime(timestamp)}</Text>
+        </View>
+
+        {/* Message Content */}
+        <View style={styles.aiContent}>
+          {renderMessageContent()}
+        </View>
+
+        {/* Action Bar */}
+        {!isTyping && (
+          <View style={styles.actionBar}>
+            <Pressable 
+              style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+              onPress={handleCopy}
+            >
+              <Ionicons 
+                name={copied ? "checkmark" : "copy-outline"} 
+                size={16} 
+                color={copied ? "#10B981" : "#6B7280"} 
+              />
+              <Text style={[styles.actionText, copied && styles.actionTextSuccess]}>
+                {copied ? 'Copied!' : 'Copy'}
+              </Text>
+            </Pressable>
+
+            <Pressable 
+              style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+            >
+              <Ionicons name="refresh-outline" size={16} color="#6B7280" />
+              <Text style={styles.actionText}>Regenerate</Text>
+            </Pressable>
           </View>
         )}
-
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onLongPress={onLongPress}
-          style={[
-            styles.bubble,
-            isUser ? styles.userBubble : styles.aiBubble,
-          ]}
-          accessible={true}
-          accessibilityLabel={`${isUser ? 'You' : 'AI'} said: ${message}`}
-          accessibilityRole="text"
-        >
-          {renderMessageContent()}
-          
-          <View style={styles.timestampContainer}>
-            <Text style={[styles.timestamp, isUser && styles.timestampUser]}>
-              {formatTime(timestamp)}
-            </Text>
-            {isUser && (
-              <Ionicons 
-                name="checkmark-done" 
-                size={14} 
-                color="rgba(255,255,255,0.7)" 
-                style={styles.readIcon}
-              />
-            )}
-          </View>
-        </TouchableOpacity>
       </View>
     </Animated.View>
   );
 };
-
-/**
- * Typing Indicator Animation
- */
+// Typing indicator component
 const TypingIndicator: React.FC = () => {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
@@ -156,7 +221,7 @@ const TypingIndicator: React.FC = () => {
         Animated.sequence([
           Animated.delay(delay),
           Animated.timing(dot, {
-            toValue: -8,
+            toValue: -6,
             duration: 400,
             useNativeDriver: true,
           }),
@@ -190,32 +255,27 @@ const TypingIndicator: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  // Layout containers
   container: {
-    marginVertical: 4,
+    marginVertical: 6,
     paddingHorizontal: 16,
   },
   userContainer: {
     alignItems: 'flex-end',
   },
   aiContainer: {
-    alignItems: 'flex-start',
-  },
-  bubbleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'stretch',
     maxWidth: '85%',
   },
-  bubbleRowReverse: {
-    flexDirection: 'row-reverse',
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 8,
+
+  // User message styles (Clean bubble - WhatsApp/iMessage inspired)
+  userBubble: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    maxWidth: '80%',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -228,39 +288,77 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  avatarText: {
-    fontSize: 18,
+  userMessageText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 0.1,
   },
-  bubble: {
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    maxWidth: '100%',
+  userTimestamp: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 4,
+    marginRight: 4,
+  },
+
+  // AI message styles (Card design - ChatGPT/Claude inspired)
+  aiCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.08,
         shadowRadius: 4,
       },
       android: {
-        elevation: 2,
+        elevation: 3,
       },
     }),
   },
-  userBubble: {
-    backgroundColor: COLORS.primary,
-    borderBottomRightRadius: 4,
+  aiHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
-  aiBubble: {
-    backgroundColor: '#F5F5F5',
-    borderBottomLeftRadius: 4,
+  aiAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F3F0FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
+  aiLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
+  },
+  aiTimestamp: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  aiContent: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  // Message text formatting
   messageText: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#1F1F1F',
-    letterSpacing: 0.2,
+    color: '#1F2937',
+    letterSpacing: 0.1,
   },
   messageTextUser: {
     color: '#FFFFFF',
@@ -271,41 +369,78 @@ const styles = StyleSheet.create({
   italicText: {
     fontStyle: 'italic',
   },
-  codeText: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 3,
-    fontSize: 13,
+  listItem: {
+    marginLeft: 8,
+    lineHeight: 24,
   },
-  timestampContainer: {
+
+  // Code styling (GitHub/VSCode inspired)
+  inlineCode: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 14,
+    backgroundColor: '#F3F4F6',
+    color: '#DC2626',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  codeBlock: {
+    backgroundColor: '#1F2937',
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#8B5CF6',
+  },
+  codeBlockText: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#E5E7EB',
+  },
+
+  // Action bar (ChatGPT inspired)
+  actionBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    gap: 8,
   },
-  timestamp: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 2,
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 6,
   },
-  timestampUser: {
-    color: 'rgba(255,255,255,0.7)',
+  actionButtonPressed: {
+    backgroundColor: '#F3F4F6',
   },
-  readIcon: {
-    marginLeft: 2,
+  actionText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
   },
+  actionTextSuccess: {
+    color: '#10B981',
+  },
+
+  // Typing indicator
   typingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   typingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#888',
+    backgroundColor: '#8B5CF6',
   },
 });

@@ -16,9 +16,9 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/config';
-import { getCurrentUser } from '../../services/authService';
-import { createCourse } from '../../services/courseServiceFirestore';
+import { COLORS } from '../../../constants/config';
+import { getCurrentUser } from '../../../services/authService';
+import { createCourse } from '../../../services/courseServiceFirestore';
 
 const PRESET_COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
