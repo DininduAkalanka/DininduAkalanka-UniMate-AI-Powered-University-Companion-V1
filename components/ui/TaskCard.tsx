@@ -27,10 +27,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   const daysUntil = Math.ceil((task.dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   
   const getDueDateText = () => {
-    if (daysUntil < 0) return `${Math.abs(daysUntil)} days overdue`;
+    if (daysUntil < 0) return `${Math.abs(daysUntil)}d overdue`;
     if (daysUntil === 0) return 'Due today';
-    if (daysUntil === 1) return 'Due tomorrow';
-    return `Due in ${daysUntil} days`;
+    if (daysUntil === 1) return 'Tomorrow';
+    if (daysUntil <= 7) return `${daysUntil} days`;
+    return task.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   const getDueDateColor = () => {
@@ -39,6 +40,15 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     if (daysUntil <= 2) return COLORS_V2.warning[400];
     return COLORS_V2.info[500];
   };
+
+  const getUrgencyLevel = () => {
+    if (daysUntil < 0) return 'overdue';
+    if (daysUntil === 0) return 'today';
+    if (daysUntil <= 2) return 'urgent';
+    return 'normal';
+  };
+
+  const urgencyLevel = getUrgencyLevel();
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -63,29 +73,54 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           pressed && styles.pressed,
         ]}
       >
+        {/* Left Color Accent */}
         <View style={[styles.indicator, { backgroundColor: courseColor }]} />
         
         <View style={styles.content}>
-          <Text style={styles.title} numberOfLines={2}>
-            {task.title}
-          </Text>
+          {/* Title Row */}
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={2}>
+              {task.title}
+            </Text>
+            {/* Priority Indicator */}
+            {task.priority && (task.priority === 'high' || task.priority === 'urgent') && (
+              <View style={styles.priorityDot}>
+                <View style={[styles.priorityInner, { backgroundColor: COLORS_V2.error[500] }]} />
+              </View>
+            )}
+          </View>
           
+          {/* Course Tag */}
           {courseName && (
-            <View style={styles.courseTag}>
+            <View style={[styles.courseTag, { backgroundColor: `${courseColor}15` }]}>
               <View style={[styles.courseDot, { backgroundColor: courseColor }]} />
-              <Text style={styles.courseName} numberOfLines={1}>
+              <Text style={[styles.courseName, { color: courseColor }]} numberOfLines={1}>
                 {courseName}
               </Text>
             </View>
           )}
           
+          {/* Footer with Due Date */}
           <View style={styles.footer}>
-            <View style={[styles.dueDateBadge, { backgroundColor: `${getDueDateColor()}15` }]}>
+            <View style={[
+              styles.dueDateBadge, 
+              { backgroundColor: `${getDueDateColor()}15` },
+              urgencyLevel === 'overdue' && styles.overdueBadge,
+              urgencyLevel === 'today' && styles.todayBadge,
+            ]}>
+              <Text style={[styles.dueDateIcon]}>
+                {urgencyLevel === 'overdue' ? '⚠️' : urgencyLevel === 'today' ? '🔥' : '📅'}
+              </Text>
               <Text style={[styles.dueDate, { color: getDueDateColor() }]}>
-                📅 {getDueDateText()}
+                {getDueDateText()}
               </Text>
             </View>
           </View>
+        </View>
+
+        {/* Chevron */}
+        <View style={styles.chevron}>
+          <Text style={styles.chevronIcon}>›</Text>
         </View>
       </Pressable>
     </MotiView>
@@ -99,51 +134,103 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     flexDirection: 'row',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS_V2.background.secondary,
   },
   pressed: {
     opacity: 0.7,
     transform: [{ scale: 0.98 }],
   },
   indicator: {
-    width: 6,
+    width: 5,
   },
   content: {
     flex: 1,
     padding: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
   },
   title: {
     ...TYPOGRAPHY.titleMedium,
     color: COLORS_V2.text.primary,
-    marginBottom: SPACING.sm,
-    fontWeight: '600',
+    flex: 1,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  priorityDot: {
+    width: 10,
+    height: 10,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS_V2.error[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  priorityInner: {
+    width: 6,
+    height: 6,
+    borderRadius: RADIUS.full,
   },
   courseTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+    gap: 6,
+    maxWidth: '75%',
   },
   courseDot: {
     width: 8,
     height: 8,
     borderRadius: RADIUS.full,
-    marginRight: SPACING.sm,
   },
   courseName: {
-    ...TYPOGRAPHY.bodySmall,
-    color: COLORS_V2.text.secondary,
-    flex: 1,
+    ...TYPOGRAPHY.labelSmall,
+    fontWeight: '700',
+    fontSize: 11,
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   dueDateBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs / 2,
     borderRadius: RADIUS.sm,
+    gap: 4,
+  },
+  overdueBadge: {
+    borderWidth: 1,
+    borderColor: COLORS_V2.error[200],
+  },
+  todayBadge: {
+    borderWidth: 1,
+    borderColor: COLORS_V2.warning[200],
+  },
+  dueDateIcon: {
+    fontSize: 12,
   },
   dueDate: {
     ...TYPOGRAPHY.labelSmall,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  chevron: {
+    justifyContent: 'center',
+    paddingRight: SPACING.md,
+    paddingLeft: SPACING.xs,
+  },
+  chevronIcon: {
+    fontSize: 24,
+    color: COLORS_V2.text.tertiary,
+    fontWeight: '300',
   },
 });

@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -12,8 +12,8 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Dashboard from '../components/Dashboard';
-import { getCurrentUser, signOutUser } from '../services/authService';
+import Dashboard from '../../components/Dashboard.enhanced';
+import { getCurrentUser, signOutUser } from '../../services/authService';
 
 const { width } = Dimensions.get('window');
 
@@ -21,10 +21,20 @@ export default function HomeScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     initialize();
   }, []);
+
+  // Auto-refresh dashboard when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        setRefreshKey(prev => prev + 1);
+      }
+    }, [userId])
+  );
 
   const initialize = async () => {
     try {
@@ -102,7 +112,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <Dashboard userId={userId} />
+      <Dashboard key={refreshKey} userId={userId} />
       </View>
     </SafeAreaView>
   );

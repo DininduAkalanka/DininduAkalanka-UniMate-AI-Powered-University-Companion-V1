@@ -6,8 +6,8 @@
 
 import { HfInference } from '@huggingface/inference';
 
-// Configuration
-const HF_API_KEY = process.env.EXPO_PUBLIC_HUGGING_FACE_API_KEY || '';
+// Configuration - Use environment variable
+const HF_API_KEY = process.env.EXPO_PUBLIC_HUGGING_FACE_API_KEY;
 const USE_FREE_TIER = true; // Set to true to use free inference API
 
 // Initialize Hugging Face client ONLY if API key exists

@@ -3,28 +3,28 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/config';
-import { ILLUSTRATIONS } from '../../constants/illustrations';
-import { getCurrentUser } from '../../services/authService';
-import { getCourses } from '../../services/courseServiceFirestore';
-import { createTask } from '../../services/taskServiceFirestore';
-import { Course, TaskPriority, TaskStatus, TaskType } from '../../types';
+import { COLORS } from '../../../constants/config';
+import { ILLUSTRATIONS } from '../../../constants/illustrations';
+import { getCurrentUser } from '../../../services/authService';
+import { getCourses } from '../../../services/courseServiceFirestore';
+import { createTask } from '../../../services/taskServiceFirestore';
+import { Course, TaskPriority, TaskStatus, TaskType } from '../../../types';
 
 export default function AddTaskScreen() {
   const router = useRouter();
@@ -47,6 +47,37 @@ export default function AddTaskScreen() {
   useEffect(() => {
     initialize();
   }, []);
+
+  // Set courseId when courses are loaded or params change
+  useEffect(() => {
+    if (courses.length > 0) {
+      if (params.courseId && typeof params.courseId === 'string') {
+        setCourseId(params.courseId);
+      } else if (!courseId) {
+        setCourseId(courses[0].id);
+      }
+    }
+  }, [courses, params.courseId]);
+
+  // Reset form when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (courses.length > 0) {
+        setTitle('');
+        setDescription('');
+        setType(TaskType.ASSIGNMENT);
+        setPriority(TaskPriority.MEDIUM);
+        setDueDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+        setEstimatedHours('');
+        // Preserve courseId from params
+        if (params.courseId && typeof params.courseId === 'string') {
+          setCourseId(params.courseId);
+        }
+      }
+    }, [courses.length, params.courseId])
+  );
+
+
 
   const initialize = async () => {
     try {
@@ -101,6 +132,14 @@ export default function AddTaskScreen() {
         dueDate,
         estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
       });
+
+      // Clear form fields
+      setTitle('');
+      setDescription('');
+      setType(TaskType.ASSIGNMENT);
+      setPriority(TaskPriority.MEDIUM);
+      setDueDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+      setEstimatedHours('');
 
       Alert.alert('Success', 'Task created successfully', [
         {
