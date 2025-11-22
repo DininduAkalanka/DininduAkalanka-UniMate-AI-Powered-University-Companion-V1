@@ -14,12 +14,12 @@ import {
     View,
 } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
-import { COLORS } from '../constants/config';
-import { ILLUSTRATIONS } from '../constants/illustrations';
-import { getCurrentUser } from '../services/authService';
-import { getCourses } from '../services/courseServiceFirestore';
-import { getTasks } from '../services/taskServiceFirestore';
-import { Course, Task } from '../types';
+import { COLORS } from '../../constants/config';
+import { ILLUSTRATIONS } from '../../constants/illustrations';
+import { getCurrentUser } from '../../services/authService';
+import { getCourses } from '../../services/courseServiceFirestore';
+import { getTasks } from '../../services/taskServiceFirestore';
+import { Course, Task } from '../../types';
 
 interface StudySession {
   id: string;
@@ -411,6 +411,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerWrapper: {
+    position: 'relative' as const,
+    overflow: 'hidden',
+  },
+  headerBackgroundImage: {
+    position: 'absolute' as const,
+    width: '100%',
+    height: '100%',
+    opacity: 0.3,
   },
   header: {
     paddingTop: 50,

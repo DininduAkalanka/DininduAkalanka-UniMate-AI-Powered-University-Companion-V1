@@ -26,15 +26,8 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Auth - use getAuth to avoid initialization issues
-let auth;
-try {
-  auth = getAuth(app);
-} catch (error) {
-  console.error('Firebase Auth initialization error:', error);
-  // Fallback: try to get existing instance
-  auth = getAuth();
-}
+// Initialize Auth - AsyncStorage persistence is handled by the auth service
+const auth = getAuth(app);
 
 // Initialize other services
 const db = getFirestore(app);

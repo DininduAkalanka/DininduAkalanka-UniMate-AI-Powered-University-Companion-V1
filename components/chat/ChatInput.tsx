@@ -1,18 +1,20 @@
 /**
- * ChatInput Component
- * Modern chat input following mobile UX best practices
- * Keyboard-safe, auto-resize, smooth animations
+ * ChatInput Component - Modern AI Chat Input
+ * Inspired by ChatGPT, Claude, Gemini input designs
+ * Features: Auto-resize, smooth animations, keyboard-safe
  */
 
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import React, { useRef, useState } from 'react';
 import {
     Animated,
     Keyboard,
     Platform,
+    Pressable,
     StyleSheet,
+    Text,
     TextInput,
-    TouchableOpacity,
     View,
 } from 'react-native';
 import { COLORS } from '../../constants/config';
@@ -23,46 +25,61 @@ export interface ChatInputProps {
   onAttachDocument?: () => void;
   placeholder?: string;
   disabled?: boolean;
+  isLoading?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   onAttachImage,
   onAttachDocument,
-  placeholder = 'Message UniMate...',
+  placeholder = 'Ask me anything...',
   disabled = false,
+  isLoading = false,
 }) => {
   const [text, setText] = useState('');
-  const [inputHeight, setInputHeight] = useState(40);
+  const [inputHeight, setInputHeight] = useState(42);
   const inputRef = useRef<TextInput>(null);
-  const sendButtonScale = useRef(new Animated.Value(0)).current;
+  const sendButtonScale = useRef(new Animated.Value(0.8)).current;
+  const sendButtonRotate = useRef(new Animated.Value(0)).current;
 
   const handleTextChange = (value: string) => {
     setText(value);
     
     // Animate send button
-    Animated.spring(sendButtonScale, {
-      toValue: value.trim().length > 0 ? 1 : 0,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 10,
-    }).start();
+    Animated.parallel([
+      Animated.spring(sendButtonScale, {
+        toValue: value.trim().length > 0 ? 1 : 0.8,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }),
+      Animated.spring(sendButtonRotate, {
+        toValue: value.trim().length > 0 ? 1 : 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const handleSend = () => {
-    if (text.trim().length === 0 || disabled) return;
+    if (text.trim().length === 0 || disabled || isLoading) return;
 
     const message = text.trim();
-    setText('');
-    setInputHeight(40);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
-    // Animate send button out
-    Animated.spring(sendButtonScale, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 10,
-    }).start();
+    setText('');
+    setInputHeight(42);
+    
+    // Reset animations
+    Animated.parallel([
+      Animated.spring(sendButtonScale, {
+        toValue: 0.8,
+        useNativeDriver: true,
+      }),
+      Animated.spring(sendButtonRotate, {
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
     onSend(message);
     Keyboard.dismiss();
@@ -70,70 +87,45 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleContentSizeChange = (event: any) => {
     const height = event.nativeEvent.contentSize.height;
-    // Max 5 lines (approximately 120px)
-    setInputHeight(Math.min(Math.max(40, height), 120));
+    // Max 5 lines (approximately 110px)
+    setInputHeight(Math.min(Math.max(42, height), 110));
   };
 
-  const canSend = text.trim().length > 0 && !disabled;
+  const rotateInterpolate = sendButtonRotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '45deg'],
+  });
+
+  const canSend = text.trim().length > 0 && !disabled && !isLoading;
 
   return (
     <View style={styles.container}>
-      <View style={styles.inputContainer}>
-        {/* Attachment Buttons */}
-        <View style={styles.attachmentButtons}>
-          {onAttachImage && (
-            <TouchableOpacity
-              onPress={onAttachImage}
-              style={styles.attachButton}
-              disabled={disabled}
-              accessible={true}
-              accessibilityLabel="Attach image"
-              accessibilityRole="button"
-            >
-              <Ionicons 
-                name="image-outline" 
-                size={22} 
-                color={disabled ? '#CCC' : COLORS.primary} 
-              />
-            </TouchableOpacity>
-          )}
-          {onAttachDocument && (
-            <TouchableOpacity
-              onPress={onAttachDocument}
-              style={styles.attachButton}
-              disabled={disabled}
-              accessible={true}
-              accessibilityLabel="Attach document"
-              accessibilityRole="button"
-            >
-              <Ionicons 
-                name="document-outline" 
-                size={22} 
-                color={disabled ? '#CCC' : COLORS.primary} 
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Text Input */}
-        <View style={[styles.inputWrapper, { minHeight: inputHeight }]}>
+      <View style={styles.inputRow}>
+        {/* Main Input Container */}
+        <View style={[styles.inputContainer, { minHeight: inputHeight + 8 }]}>
           <TextInput
             ref={inputRef}
             style={[styles.input, { height: inputHeight }]}
             placeholder={placeholder}
-            placeholderTextColor="#999"
+            placeholderTextColor="#9CA3AF"
             value={text}
             onChangeText={handleTextChange}
             onContentSizeChange={handleContentSizeChange}
             multiline
             maxLength={2000}
-            editable={!disabled}
-            returnKeyType="default"
+            editable={!disabled && !isLoading}
+            returnKeyType="send"
             blurOnSubmit={false}
+            onSubmitEditing={handleSend}
             accessible={true}
             accessibilityLabel="Message input"
-            accessibilityHint="Type your message to the AI assistant"
+            accessibilityHint="Type your message to UniMate AI"
           />
+          
+          {/* Character count (only show when getting close to limit) */}
+          {text.length > 1800 && (
+            <Text style={styles.charCount}>{2000 - text.length}</Text>
+          )}
         </View>
 
         {/* Send Button */}
@@ -141,37 +133,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           style={[
             styles.sendButtonContainer,
             {
-              opacity: sendButtonScale,
               transform: [
                 { scale: sendButtonScale },
-                {
-                  rotate: sendButtonScale.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['45deg', '0deg'],
-                  }),
-                },
+                { rotate: rotateInterpolate },
               ],
+              opacity: canSend ? 1 : 0.5,
             },
           ]}
         >
-          <TouchableOpacity
+          <Pressable
             onPress={handleSend}
-            style={[
-              styles.sendButton,
-              !canSend && styles.sendButtonDisabled,
-            ]}
             disabled={!canSend}
-            accessible={true}
-            accessibilityLabel="Send message"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canSend }}
+            style={({ pressed }) => [
+              styles.sendButton,
+              canSend && styles.sendButtonActive,
+              pressed && styles.sendButtonPressed,
+            ]}
           >
-            <Ionicons 
-              name="arrow-up" 
-              size={20} 
-              color="#FFFFFF" 
-            />
-          </TouchableOpacity>
+            {isLoading ? (
+              <Ionicons name="hourglass-outline" size={20} color="#FFFFFF" />
+            ) : (
+              <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+            )}
+          </Pressable>
         </Animated.View>
       </View>
     </View>
@@ -182,75 +166,66 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    paddingBottom: Platform.OS === 'ios' ? 12 : 8,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
       },
       android: {
         elevation: 8,
       },
     }),
   },
-  inputContainer: {
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 10,
   },
-  attachmentButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingBottom: 8,
-  },
-  attachButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  inputWrapper: {
+  inputContainer: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 20,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 4,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
   },
   input: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#1F1F1F',
-    paddingVertical: 0,
-    textAlignVertical: 'center',
+    color: '#1F2937',
+    paddingVertical: 8,
+    maxHeight: 110,
+  },
+  charCount: {
+    position: 'absolute',
+    right: 12,
+    bottom: 4,
+    fontSize: 11,
+    color: '#9CA3AF',
   },
   sendButtonContainer: {
-    paddingBottom: 8,
+    marginBottom: 4,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primary,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
       ios: {
-        shadowColor: COLORS.primary,
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.15,
         shadowRadius: 4,
       },
       android: {
@@ -258,7 +233,10 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  sendButtonDisabled: {
-    backgroundColor: '#CCC',
+  sendButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  sendButtonPressed: {
+    transform: [{ scale: 0.92 }],
   },
 });
