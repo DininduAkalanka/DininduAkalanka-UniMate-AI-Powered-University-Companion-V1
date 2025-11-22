@@ -8,7 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "security:setup": "node ./scripts/setup-security.bat",
+    "security:check": "echo 'Checking for exposed secrets...' && grep -r 'hf_[A-Za-z0-9]\\{34\\}\\|AIza[A-Za-z0-9_-]\\{35\\}' --exclude-dir=node_modules --exclude-dir=.git --exclude=.env.example . || echo 'No hardcoded secrets found ✓'"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

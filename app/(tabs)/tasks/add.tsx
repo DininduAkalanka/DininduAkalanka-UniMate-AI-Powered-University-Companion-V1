@@ -7,20 +7,21 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../../../constants/config';
 import { ILLUSTRATIONS } from '../../../constants/illustrations';
+import { indexTask } from '../../../services/ai/ragIndexer';
 import { getCurrentUser } from '../../../services/authService';
 import { getCourses } from '../../../services/courseServiceFirestore';
 import { createTask } from '../../../services/taskServiceFirestore';
@@ -121,7 +122,7 @@ export default function AddTaskScreen() {
 
     setSaving(true);
     try {
-      await createTask({
+      const newTask = await createTask({
         userId,
         courseId,
         title: title.trim(),
@@ -132,6 +133,15 @@ export default function AddTaskScreen() {
         dueDate,
         estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
       });
+
+      // Auto-index for RAG
+      try {
+        await indexTask(newTask);
+        console.log('✅ Task indexed for RAG:', newTask.title);
+      } catch (indexError) {
+        console.warn('⚠️ Failed to index task for RAG:', indexError);
+        // Don't fail the entire operation if indexing fails
+      }
 
       // Clear form fields
       setTitle('');

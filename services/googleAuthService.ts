@@ -116,7 +116,7 @@ const USERS_COLLECTION = 'users';
 export const useGoogleAuth = () => {
   // ✅ MUST USE useIdTokenAuthRequest FOR FIREBASE
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: '925356962696-gbc42orlfevlj73ep3n1u72ju0pjd6jd.apps.googleusercontent.com', // web client (required)
+    clientId: '420068660090-318vi3v8sjcb4dcn2nro7iqb7t7gohou.apps.googleusercontent.com', // web client (required)
     androidClientId: '925356962696-jl1pbm36bmueq9s9q8h8bik4cb3ea620.apps.googleusercontent.com',
     iosClientId: '925356962696-6qcm7ehokcm3o3vvdggik0ss0o3s554h.apps.googleusercontent.com',
 

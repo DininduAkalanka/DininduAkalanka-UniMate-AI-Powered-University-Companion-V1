@@ -1,6 +1,14 @@
 import { Stack } from "expo-router";
+import { useEffect } from "react";
+import { errorTracker, setupGlobalErrorHandler } from "../utils/errorTracking";
 
 export default function RootLayout() {
+  // Initialize error tracking on app start
+  useEffect(() => {
+    errorTracker.initialize();
+    setupGlobalErrorHandler();
+  }, []);
+
   return (
     <Stack
       screenOptions={{
