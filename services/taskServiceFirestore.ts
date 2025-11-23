@@ -11,8 +11,9 @@ import {
     updateDoc,
     where,
 } from 'firebase/firestore';
-import { db } from '../firebase/firebaseint';
+import { auth, db } from '../firebase/firebaseint';
 import { Task, TaskPriority, TaskStatus, TaskType } from '../types';
+import { checkNewTaskRisk, triggerNotificationCheck } from './taskNotificationIntegration';
 
 const TASKS_COLLECTION = 'tasks';
 
@@ -50,6 +51,19 @@ export const createTask = async (
     updatedAt: now,
   });
 
+  // Trigger notification check for new task
+  console.log('[TaskService] Triggering notification check for new task:', newTask.id);
+  console.log('[TaskService] Task details:', {
+    title: newTask.title,
+    dueDate: newTask.dueDate,
+    estimatedHours: newTask.estimatedHours,
+    priority: newTask.priority
+  });
+  
+  checkNewTaskRisk(newTask.id, newTask.userId).catch(err => {
+    console.error('[TaskService] Failed to check new task risk:', err);
+  });
+
   return newTask;
 };
 
@@ -57,13 +71,18 @@ export const createTask = async (
  * Get all tasks for a user
  */
 export const getTasks = async (userId: string): Promise<Task[]> => {
+  console.log('[TaskService] getTasks called with userId:', userId);
+  console.log('[TaskService] Current auth user:', auth.currentUser?.uid);
+  
   const q = query(
     collection(db, TASKS_COLLECTION),
     where('userId', '==', userId),
     orderBy('dueDate', 'asc')
   );
 
+  console.log('[TaskService] Executing query...');
   const querySnapshot = await getDocs(q);
+  console.log('[TaskService] Query successful! Got', querySnapshot.size, 'tasks');
   const tasks: Task[] = [];
 
   querySnapshot.forEach((docSnap) => {
@@ -313,20 +332,41 @@ export const updateTask = async (
   delete updateData.createdAt;
 
   await updateDoc(taskRef, updateData);
+
+  // Trigger notification check after update
+  if (updates.userId) {
+    triggerNotificationCheck(updates.userId).catch(err => {
+      console.error('Failed to trigger notification check:', err);
+    });
+  }
 };
 
 /**
  * Mark task as completed
  */
-export const completeTask = async (id: string): Promise<void> => {
+export const completeTask = async (id: string, userId?: string): Promise<void> => {
   await updateTask(id, { status: TaskStatus.COMPLETED });
+  
+  // Trigger notification check after completion
+  if (userId) {
+    triggerNotificationCheck(userId).catch(err => {
+      console.error('Failed to trigger notification check:', err);
+    });
+  }
 };
 
 /**
  * Delete task
  */
-export const deleteTask = async (id: string): Promise<void> => {
+export const deleteTask = async (id: string, userId?: string): Promise<void> => {
   await deleteDoc(doc(db, TASKS_COLLECTION, id));
+  
+  // Trigger notification check after deletion
+  if (userId) {
+    triggerNotificationCheck(userId).catch(err => {
+      console.error('Failed to trigger notification check:', err);
+    });
+  }
 };
 
 /**

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -107,9 +108,23 @@ export default function HomeScreen() {
         
         <View style={styles.header}>
         <Text style={styles.headerTitle}>UniMate</Text>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            onPress={() => router.push('/study-session')} 
+            style={styles.notificationButton}
+          >
+            <Ionicons name="book-outline" size={24} color="#6366F1" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => router.push('/notification-settings')} 
+            style={styles.notificationButton}
+          >
+            <Ionicons name="notifications-outline" size={24} color="#6366F1" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+            <Text style={styles.signOutButtonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Dashboard key={refreshKey} userId={userId} />
@@ -169,6 +184,19 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  notificationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   signOutButton: {
     paddingHorizontal: 16,

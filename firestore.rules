@@ -60,112 +60,120 @@ service cloud.firestore {
     // COURSES COLLECTION
     // ============================================
     match /courses/{courseId} {
-      allow read: if isOwner(resource.data.userId);
+      // Users can only read their own courses
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
+      // Users can only create courses for themselves
       allow create: if isAuthenticated() 
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'code', 'name', 'createdAt', 'updatedAt'])
-        && validStringLength(request.resource.data.code, 2, 20)
-        && validStringLength(request.resource.data.name, 2, 100)
-        && (!request.resource.data.keys().hasAny(['difficulty']) 
-           || request.resource.data.difficulty in [1, 2, 3, 4, 5]);
+        && request.resource.data.keys().hasAll(['userId', 'name', 'code'])
+        && validStringLength(request.resource.data.name, 1, 200);
       
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['name']) 
-           || validStringLength(request.resource.data.name, 2, 100));
+      // Users can only update their own courses
+      allow update: if isAuthenticated() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
       
-      allow delete: if isOwner(resource.data.userId);
+      // Users can only delete their own courses
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
     
     // ============================================
     // TASKS COLLECTION
     // ============================================
     match /tasks/{taskId} {
-      allow read: if isOwner(resource.data.userId);
+      // Users can only read their own tasks
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
+      // Users can only create tasks for themselves
       allow create: if isAuthenticated() 
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'courseId', 'title', 'type', 'priority', 'status', 'dueDate', 'createdAt', 'updatedAt'])
-        && validStringLength(request.resource.data.title, 3, 100)
-        && request.resource.data.type in ['assignment', 'exam', 'quiz', 'project', 'study', 'other']
-        && request.resource.data.priority in ['low', 'medium', 'high', 'urgent']
-        && request.resource.data.status in ['todo', 'in_progress', 'completed', 'overdue']
-        && (!request.resource.data.keys().hasAny(['estimatedHours']) 
-           || (request.resource.data.estimatedHours >= 0 && request.resource.data.estimatedHours <= 1000))
-        && (!request.resource.data.keys().hasAny(['description']) 
-           || validStringLength(request.resource.data.description, 0, 5000));
+        && request.resource.data.keys().hasAll(['userId', 'title', 'status'])
+        && validStringLength(request.resource.data.title, 1, 200);
       
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['title']) 
-           || validStringLength(request.resource.data.title, 3, 100));
+      // Users can only update their own tasks
+      allow update: if isAuthenticated() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
       
-      allow delete: if isOwner(resource.data.userId);
+      // Users can only delete their own tasks
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
     
     // ============================================
     // TIMETABLE ENTRIES
     // ============================================
     match /timetableEntries/{entryId} {
-      allow read: if isOwner(resource.data.userId);
+      // Users can only read their own timetable entries
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
+      // Users can only create timetable entries for themselves
       allow create: if isAuthenticated() 
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'courseId', 'dayOfWeek', 'startTime', 'endTime', 'createdAt'])
-        && request.resource.data.dayOfWeek >= 0
-        && request.resource.data.dayOfWeek <= 6
-        && request.resource.data.startTime.matches('^([0-1][0-9]|2[0-3]):[0-5][0-9]$')
-        && request.resource.data.endTime.matches('^([0-1][0-9]|2[0-3]):[0-5][0-9]$');
+        && request.resource.data.userId == request.auth.uid;
       
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId;
+      // Users can only update their own timetable entries
+      allow update: if isAuthenticated() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
       
-      allow delete: if isOwner(resource.data.userId);
+      // Users can only delete their own timetable entries
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+    
+    // ============================================
+    // TIMETABLE (Alternative collection name)
+    // ============================================
+    match /timetable/{entryId} {
+      // Users can only read their own timetable entries
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Users can only create timetable entries for themselves
+      allow create: if isAuthenticated() 
+        && request.resource.data.userId == request.auth.uid;
+      
+      // Users can only update their own timetable entries
+      allow update: if isAuthenticated() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+      
+      // Users can only delete their own timetable entries
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
     
     // ============================================
     // STUDY SESSIONS
     // ============================================
     match /studySessions/{sessionId} {
-      allow read: if isOwner(resource.data.userId);
+      // Users can only read their own study sessions
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
+      // Users can only create study sessions for themselves
       allow create: if isAuthenticated() 
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'courseId', 'duration', 'date', 'createdAt'])
         && request.resource.data.duration > 0
-        && request.resource.data.duration <= 1440
-        && (!request.resource.data.keys().hasAny(['effectiveness']) 
-           || request.resource.data.effectiveness in [1, 2, 3, 4, 5])
-        && (!request.resource.data.keys().hasAny(['notes']) 
-           || validStringLength(request.resource.data.notes, 0, 5000));
+        && request.resource.data.duration <= 480;
       
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId;
+      // Users can only update their own study sessions
+      allow update: if isAuthenticated() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
       
-      allow delete: if isOwner(resource.data.userId);
+      // Users can only delete their own study sessions
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
     
     // ============================================
-    // CHAT MESSAGES (with rate limiting)
+    // CHAT MESSAGES
     // ============================================
     match /chatMessages/{messageId} {
-      allow read: if isOwner(resource.data.userId);
-      
-      allow create: if isAuthenticated() 
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'text', 'isUserMessage', 'timestamp'])
-        && validStringLength(request.resource.data.text, 1, 5000)
-        && notTooFrequent(2); // Rate limit: max 1 message per 2 seconds
-      
-      allow delete: if isOwner(resource.data.userId);
+      allow read, write: if isAuthenticated();
     }
     
     // ============================================
     // CHAT SESSIONS
     // ============================================
     match /chatSessions/{chatId} {
-      allow read: if isOwner(resource.data.userId);
+      allow read, write: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isOwner(resource.data.userId);
     }
@@ -174,16 +182,7 @@ service cloud.firestore {
     // STUDY PLANS
     // ============================================
     match /studyPlans/{planId} {
-      allow read: if isOwner(resource.data.userId);
-      
-      allow create: if isAuthenticated() 
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'startDate', 'endDate', 'generatedAt', 'aiGenerated']);
-      
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId;
-      
-      allow delete: if isOwner(resource.data.userId);
+      allow read, write: if isAuthenticated();
     }
     
     // ============================================
@@ -200,19 +199,7 @@ service cloud.firestore {
     // NOTIFICATIONS
     // ============================================
     match /notifications/{notificationId} {
-      allow read: if isOwner(resource.data.userId);
-      
-      allow create: if isAuthenticated() 
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'title', 'body', 'type', 'read', 'createdAt'])
-        && validStringLength(request.resource.data.title, 1, 100)
-        && validStringLength(request.resource.data.body, 1, 500)
-        && request.resource.data.type in ['deadline', 'study_reminder', 'achievement', 'warning'];
-      
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      
-      allow delete: if isOwner(resource.data.userId);
+      allow read, write: if isAuthenticated();
     }
     
     // ============================================

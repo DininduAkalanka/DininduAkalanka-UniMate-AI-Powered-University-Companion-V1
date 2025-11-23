@@ -283,23 +283,45 @@ export default function DashboardEnhanced({ userId }: DashboardProps) {
     try {
       setLoading(true);
       
-      const [tasksData, coursesData, studyData] = await Promise.all([
-        getTasks(userId),
-        getCourses(userId),
-        getStudyStats(userId, 7),
-      ]);
+      console.log('[Dashboard.enhanced] Loading tasks...');
+      const tasksData = await getTasks(userId);
+      console.log('[Dashboard.enhanced] Tasks loaded:', tasksData.length);
+      
+      console.log('[Dashboard.enhanced] Loading courses...');
+      const coursesData = await getCourses(userId);
+      console.log('[Dashboard.enhanced] Courses loaded:', coursesData.length);
+      
+      console.log('[Dashboard.enhanced] Loading study stats...');
+      let studyData = null;
+      try {
+        studyData = await getStudyStats(userId, 7);
+        console.log('[Dashboard.enhanced] Study stats loaded');
+      } catch (studyStatsError) {
+        console.warn('[Dashboard.enhanced] Failed to load study stats:', studyStatsError);
+        // Use default stats if it fails
+        studyData = {
+          totalHours: 0,
+          totalSessions: 0,
+          averageSessionDuration: 0,
+          mostStudiedCourse: null,
+          studyStreak: 0,
+        };
+      }
 
       setTasks(tasksData);
       setCourses(coursesData);
       setStudyStats(studyData);
 
+      console.log('[Dashboard.enhanced] Filtering upcoming tasks...');
       const upcomingTasks = tasksData
         .filter(t => t.status !== TaskStatus.COMPLETED && t.dueDate > new Date())
         .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
         .slice(0, 5);
       
       if (upcomingTasks.length > 0) {
+        console.log('[Dashboard.enhanced] Loading predictions for', upcomingTasks.length, 'tasks...');
         const predictionsData = await predictDeadlineRisks(upcomingTasks);
+        console.log('[Dashboard.enhanced] Predictions loaded:', predictionsData.length);
         setPredictions(predictionsData.slice(0, 3));
       }
 
@@ -474,6 +496,12 @@ export default function DashboardEnhanced({ userId }: DashboardProps) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsContainer}>
+            <QuickActionChip
+              icon="⏱️"
+              label="Study Session"
+              onPress={() => router.push('/study-session')}
+              color="#10B981"
+            />
             <QuickActionChip
               icon="➕"
               label="Add Task"

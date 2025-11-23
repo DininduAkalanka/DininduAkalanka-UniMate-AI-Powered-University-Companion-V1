@@ -65,7 +65,6 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 }) => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Quick Actions</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -95,34 +94,28 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    paddingVertical: 12,
+    backgroundColor: 'transparent',
   },
   scrollContent: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     gap: 8,
   },
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'rgba(124, 58, 237, 0.08)',
     paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    paddingHorizontal: 16,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: 'rgba(124, 58, 237, 0.15)',
     marginHorizontal: 4,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   iconContainer: {
     marginRight: 6,

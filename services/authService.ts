@@ -258,12 +258,18 @@ export const signOutUser = async (): Promise<void> => {
  */
 export const getCurrentUser = async (): Promise<User | null> => {
   const firebaseUser = auth.currentUser;
+  
+  console.log('[AuthService] getCurrentUser - firebaseUser:', firebaseUser?.uid);
+  console.log('[AuthService] getCurrentUser - email verified:', firebaseUser?.emailVerified);
+  console.log('[AuthService] getCurrentUser - auth state:', !!firebaseUser);
 
   if (!firebaseUser) {
+    console.log('[AuthService] No Firebase user, checking AsyncStorage...');
     // Try to get from AsyncStorage if Firebase auth hasn't loaded yet
     return await getUserFromStorage();
   }
 
+  console.log('[AuthService] Fetching user document from Firestore...');
   const userDoc = await getDoc(doc(db, USERS_COLLECTION, firebaseUser.uid));
 
   if (!userDoc.exists()) {

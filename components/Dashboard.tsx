@@ -5,15 +5,15 @@ import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
-  FlatList,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Dimensions,
+    FlatList,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { COLORS } from '../constants/config';
 import { COLORS_V2, ELEVATION, RADIUS, SPACING, TYPOGRAPHY } from '../constants/designSystem';
@@ -64,17 +64,21 @@ export default function Dashboard({ userId }: DashboardProps) {
     try {
       setLoading(true);
       
-      const [
-        tasksData,
-        coursesData,
-        statsData,
-        studyData,
-      ] = await Promise.all([
-        getTasks(userId),
-        getCourses(userId),
-        getTaskStats(userId),
-        getStudyStats(userId, 7),
-      ]);
+      console.log('[Dashboard] Loading tasks...');
+      const tasksData = await getTasks(userId);
+      console.log('[Dashboard] Tasks loaded:', tasksData.length);
+      
+      console.log('[Dashboard] Loading courses...');
+      const coursesData = await getCourses(userId);
+      console.log('[Dashboard] Courses loaded:', coursesData.length);
+      
+      console.log('[Dashboard] Loading task stats...');
+      const statsData = await getTaskStats(userId);
+      console.log('[Dashboard] Task stats loaded');
+      
+      console.log('[Dashboard] Loading study stats...');
+      const studyData = await getStudyStats(userId, 7);
+      console.log('[Dashboard] Study stats loaded');
 
       setTasks(tasksData);
       setCourses(coursesData);
@@ -82,10 +86,12 @@ export default function Dashboard({ userId }: DashboardProps) {
       setStudyStats(studyData);
 
       // Get deadline predictions for upcoming tasks
+      console.log('[Dashboard] Loading predictions...');
       const upcomingTasks = tasksData.filter(
         t => t.status !== TaskStatus.COMPLETED && t.dueDate > new Date()
       );
       const predictionsData = await predictDeadlineRisks(upcomingTasks);
+      console.log('[Dashboard] Predictions loaded:', predictionsData.length);
       setPredictions(predictionsData.slice(0, 3)); // Top 3 at-risk tasks
 
     } catch (error) {

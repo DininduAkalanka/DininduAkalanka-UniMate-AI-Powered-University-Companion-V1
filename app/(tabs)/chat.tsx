@@ -371,6 +371,74 @@ export default function AIChatScreen() {
     handleSend(prompt);
   };
 
+  const renderQuickActions = () => {
+    if (messages.length > 1 || keyboardVisible) return null;
+
+    return (
+      <View style={styles.quickActionsContainer}>
+        <Text style={styles.quickActionsHint}>💡 Tap to try</Text>
+        <QuickActions
+          actions={
+            useRAG
+              ? [
+                  {
+                    id: '1',
+                    label: 'My Tasks',
+                    icon: 'list-outline',
+                    prompt: 'What are my high-priority pending tasks?',
+                  },
+                  {
+                    id: '2',
+                    label: 'Next Exam',
+                    icon: 'school-outline',
+                    prompt: 'When is my next exam and what should I focus on?',
+                  },
+                  {
+                    id: '3',
+                    label: 'Study Plan',
+                    icon: 'calendar-outline',
+                    prompt: 'Create a personalized study plan based on my courses',
+                  },
+                  {
+                    id: '4',
+                    label: 'Weekly Focus',
+                    icon: 'trophy-outline',
+                    prompt: 'What should I prioritize this week?',
+                  },
+                ]
+              : [
+                  {
+                    id: '1',
+                    label: 'Explain Topic',
+                    icon: 'bulb-outline',
+                    prompt: 'Explain quantum mechanics in simple terms',
+                  },
+                  {
+                    id: '2',
+                    label: 'Study Tips',
+                    icon: 'star-outline',
+                    prompt: 'What are the best study techniques for memorization?',
+                  },
+                  {
+                    id: '3',
+                    label: 'Summarize',
+                    icon: 'document-text-outline',
+                    prompt: 'Summarize this text: [paste your text here]',
+                  },
+                  {
+                    id: '4',
+                    label: 'Motivation',
+                    icon: 'heart-outline',
+                    prompt: "I'm feeling overwhelmed with studying, can you help?",
+                  },
+                ]
+          }
+          onActionPress={handleQuickAction}
+        />
+      </View>
+    );
+  };
+
   const handleToggleRAG = () => {
     const newRAGState = !useRAG;
     setUseRAG(newRAGState);
@@ -579,41 +647,9 @@ export default function AIChatScreen() {
             maxToRenderPerBatch={10}
             windowSize={10}
             initialNumToRender={15}
+            ListHeaderComponent={renderQuickActions}
+            ListHeaderComponentStyle={styles.listHeader}
           />
-        )}
-
-        {messages.length <= 1 && !keyboardVisible && (
-          <View style={styles.quickActionsWrapper}>
-            <QuickActions
-              actions={[
-                {
-                  id: '1',
-                  label: 'Explain Topic',
-                  icon: 'bulb-outline',
-                  prompt: 'Explain photosynthesis in simple terms',
-                },
-                {
-                  id: '2',
-                  label: 'Study Plan',
-                  icon: 'calendar-outline',
-                  prompt: 'Create a 7-day study plan for my chemistry exam',
-                },
-                {
-                  id: '3',
-                  label: 'Study Tips',
-                  icon: 'star-outline',
-                  prompt: 'What are the best study techniques for memorization?',
-                },
-                {
-                  id: '4',
-                  label: 'Summarize',
-                  icon: 'document-text-outline',
-                  prompt: 'Summarize: [paste your text here]',
-                },
-              ]}
-              onActionPress={handleQuickAction}
-            />
-          </View>
         )}
 
         <ScrollToBottomButton visible={showScrollButton} onPress={() => scrollToBottom(true)} />
@@ -769,14 +805,27 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
+    paddingBottom: 16,
   },
-  quickActionsWrapper: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
+  listHeader: {
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  quickActionsContainer: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    backgroundColor: 'transparent',
+    marginTop: 0,
+  },
+  quickActionsHint: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
+    marginTop: 0,
+    opacity: 0.6,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   // Modern Loading Overlay Styles
   loadingOverlay: {

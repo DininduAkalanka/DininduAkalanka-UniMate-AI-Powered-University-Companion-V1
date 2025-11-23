@@ -11,7 +11,7 @@ import {
 import { db } from '../firebase/firebaseint';
 import { StudySession } from '../types';
 
-const STUDY_SESSIONS_COLLECTION = 'study_sessions';
+const STUDY_SESSIONS_COLLECTION = 'studySessions';
 
 /**
  * Create a new study session
@@ -151,10 +151,13 @@ export const getStudyStats = async (
   mostStudiedCourse: string | null;
   studyStreak: number;
 }> => {
+  console.log('[StudyService] getStudyStats called for userId:', userId, 'days:', days);
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
+  console.log('[StudyService] Date range:', startDate.toISOString(), 'to', new Date().toISOString());
 
   const sessions = await getStudySessions(userId, startDate, new Date());
+  console.log('[StudyService] Retrieved', sessions.length, 'study sessions');
 
   const totalMinutes = sessions.reduce((sum, session) => sum + session.duration, 0);
   const averageDuration = sessions.length > 0 ? totalMinutes / sessions.length : 0;
