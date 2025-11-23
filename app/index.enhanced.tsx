@@ -5,17 +5,17 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/config';
@@ -144,7 +144,7 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
-  //google sign in handler
+
   const handleGoogleSignIn = async () => {
     setError('');
     setGoogleLoading(true);
@@ -204,6 +204,7 @@ export default function LoginScreen() {
         <View style={styles.circle2} />
         <View style={styles.circle3} />
       </View>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
@@ -466,23 +467,43 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            {/* Professional Value Proposition */}
-            <View style={styles.valueProposition}>
-              <Text style={styles.valuePropTitle}>Trusted by students worldwide</Text>
-              
-              <View style={styles.benefitsList}>
-                <View style={styles.benefitRow}>
-                  <Ionicons name="checkmark-circle" size={20} color="#4ade80" />
-                  <Text style={styles.benefitText}>AI-powered study assistance</Text>
+            {/* Feature Cards - Enhanced */}
+            <View style={styles.features}>
+              <View style={styles.featureCard}>
+                <View style={styles.featureIconContainer}>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    style={styles.featureIconGradient}
+                  >
+                    <Text style={styles.featureIcon}>🤖</Text>
+                  </LinearGradient>
                 </View>
-                <View style={styles.benefitRow}>
-                  <Ionicons name="checkmark-circle" size={20} color="#4ade80" />
-                  <Text style={styles.benefitText}>Smart progress tracking</Text>
+                <Text style={styles.featureText}>AI Study</Text>
+                <Text style={styles.featureSubtext}>Assistant</Text>
+              </View>
+              <View style={styles.featureCard}>
+                <View style={styles.featureIconContainer}>
+                  <LinearGradient
+                    colors={['#f093fb', '#f5576c']}
+                    style={styles.featureIconGradient}
+                  >
+                    <Text style={styles.featureIcon}>📊</Text>
+                  </LinearGradient>
                 </View>
-                <View style={styles.benefitRow}>
-                  <Ionicons name="checkmark-circle" size={20} color="#4ade80" />
-                  <Text style={styles.benefitText}>Personalized learning paths</Text>
+                <Text style={styles.featureText}>Smart</Text>
+                <Text style={styles.featureSubtext}>Analytics</Text>
+              </View>
+              <View style={styles.featureCard}>
+                <View style={styles.featureIconContainer}>
+                  <LinearGradient
+                    colors={['#4facfe', '#00f2fe']}
+                    style={styles.featureIconGradient}
+                  >
+                    <Text style={styles.featureIcon}>⏰</Text>
+                  </LinearGradient>
                 </View>
+                <Text style={styles.featureText}>Deadline</Text>
+                <Text style={styles.featureSubtext}>Predictions</Text>
               </View>
             </View>
 
@@ -555,26 +576,6 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? 20 : 12,
     paddingBottom: 32,
   },
-  heroContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  glassmorphicCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
-  },
-  heroImage: {
-    width: width * 0.6,
-    height: 180,
-  },
   logoContainer: {
     alignItems: 'center',
     marginTop: 24,
@@ -612,14 +613,14 @@ const styles = StyleSheet.create({
   },
   formCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 1)',
   },
@@ -633,7 +634,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    marginBottom: 20,
+    marginBottom: 24,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -722,11 +723,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
   },
   buttonGradient: {
-    paddingVertical: 14,
+    paddingVertical: 18,
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
+    minHeight: 56,
   },
   buttonText: {
     color: '#fff',
@@ -737,7 +738,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: 20,
   },
   divider: {
     flex: 1,
@@ -751,92 +752,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1,
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  toggleText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  toggleLink: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: 'bold',
-  },
-  valueProposition: {
-    marginTop: 24,
-    marginBottom: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  valuePropTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 16,
-    letterSpacing: 0.3,
-  },
-  benefitsList: {
-    gap: 12,
-  },
-  benefitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  benefitText: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: '500',
-    flex: 1,
-    letterSpacing: 0.2,
-  },
-  trustBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    alignSelf: 'center',
-  },
-  trustText: {
-    fontSize: 12,
-    color: '#555',
-    marginLeft: 6,
-    fontWeight: '600',
-  },
-
-
-
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 10,
-    borderWidth: 1.5,
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: '#e0e0e0',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
-    minHeight: 48,
+    minHeight: 56,
   },
   googleLogoContainer: {
     width: 20,
@@ -854,5 +786,89 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3c4043',
     letterSpacing: 0.25,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  toggleText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  toggleLink: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+  features: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  featureCard: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 1)',
+  },
+  featureIconContainer: {
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  featureIconGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featureIcon: {
+    fontSize: 26,
+  },
+  featureText: {
+    fontSize: 11,
+    color: COLORS.text,
+    textAlign: 'center',
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  featureSubtext: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    fontWeight: '600',
+    lineHeight: 13,
+  },
+  trustBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignSelf: 'center',
+  },
+  trustText: {
+    fontSize: 12,
+    color: '#555',
+    marginLeft: 6,
+    fontWeight: '600',
   },
 });

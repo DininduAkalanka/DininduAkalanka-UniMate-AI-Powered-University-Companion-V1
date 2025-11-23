@@ -16,9 +16,10 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/config';
-import { getCurrentUser } from '../../services/authService';
-import { createCourse } from '../../services/courseServiceFirestore';
+import { COLORS } from '../../../constants/config';
+import { indexCourse } from '../../../services/ai/ragIndexer';
+import { getCurrentUser } from '../../../services/authService';
+import { createCourse } from '../../../services/courseServiceFirestore';
 
 const PRESET_COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
@@ -75,7 +76,7 @@ export default function AddCourseScreen() {
 
     setSaving(true);
     try {
-      await createCourse({
+      const newCourse = await createCourse({
         userId,
         code: code.trim().toUpperCase(),
         name: name.trim(),
@@ -84,6 +85,15 @@ export default function AddCourseScreen() {
         color,
         difficulty,
       });
+
+      // Auto-index for RAG
+      try {
+        await indexCourse(newCourse);
+        console.log('✅ Course indexed for RAG:', newCourse.name);
+      } catch (indexError) {
+        console.warn('⚠️ Failed to index course for RAG:', indexError);
+        // Don't fail the entire operation if indexing fails
+      }
 
       Alert.alert('Success', 'Course added successfully', [
         {

@@ -1,6 +1,7 @@
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -12,8 +13,8 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Dashboard from '../components/Dashboard';
-import { getCurrentUser, signOutUser } from '../services/authService';
+import Dashboard from '../../components/Dashboard.enhanced';
+import { getCurrentUser, signOutUser } from '../../services/authService';
 
 const { width } = Dimensions.get('window');
 
@@ -21,10 +22,20 @@ export default function HomeScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     initialize();
   }, []);
+
+  // Auto-refresh dashboard when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        setRefreshKey(prev => prev + 1);
+      }
+    }, [userId])
+  );
 
   const initialize = async () => {
     try {
@@ -97,12 +108,26 @@ export default function HomeScreen() {
         
         <View style={styles.header}>
         <Text style={styles.headerTitle}>UniMate</Text>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            onPress={() => router.push('/study-session')} 
+            style={styles.notificationButton}
+          >
+            <Ionicons name="book-outline" size={24} color="#6366F1" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => router.push('/notification-settings')} 
+            style={styles.notificationButton}
+          >
+            <Ionicons name="notifications-outline" size={24} color="#6366F1" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+            <Text style={styles.signOutButtonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Dashboard userId={userId} />
+      <Dashboard key={refreshKey} userId={userId} />
       </View>
     </SafeAreaView>
   );
@@ -159,6 +184,19 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  notificationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   signOutButton: {
     paddingHorizontal: 16,
