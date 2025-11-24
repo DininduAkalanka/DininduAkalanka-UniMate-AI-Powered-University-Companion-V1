@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -43,6 +43,23 @@ export default function AddCourseScreen() {
   useEffect(() => {
     initialize();
   }, []);
+
+  // ✅ Reset form when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // Clear form fields when screen is focused
+      resetForm();
+    }, [])
+  );
+
+  const resetForm = () => {
+    setCode('');
+    setName('');
+    setCredits('');
+    setInstructor('');
+    setColor(PRESET_COLORS[0]);
+    setDifficulty(3);
+  };
 
   const initialize = async () => {
     try {
