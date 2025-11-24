@@ -1,20 +1,47 @@
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    orderBy,
-    query,
-    setDoc,
-    Timestamp,
-    updateDoc,
-    where,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  setDoc,
+  startAfter,
+  Timestamp,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
-import { db } from '../firebase/firebaseint';
+import { auth, db } from '../firebase/firebaseint';
 import { Task, TaskPriority, TaskStatus, TaskType } from '../types';
+import { checkNewTaskRisk, triggerNotificationCheck } from './taskNotificationIntegration';
 
 const TASKS_COLLECTION = 'tasks';
+const CACHE_TTL = 60000; // 1 minute cache
+
+// ✅ OPTIMIZED: In-memory cache for performance
+const cache = new Map<string, { data: any; timestamp: number }>();
+
+function getCached<T>(key: string): T | null {
+  const cached = cache.get(key);
+  if (!cached) return null;
+  
+  if (Date.now() - cached.timestamp > CACHE_TTL) {
+    cache.delete(key);
+    return null;
+  }
+  
+  return cached.data as T;
+}
+
+function setCache(key: string, data: any) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
+export function clearTaskCache() {
+  cache.clear();
+}
 
 /**
  * Create a new task in Firestore
@@ -50,20 +77,48 @@ export const createTask = async (
     updatedAt: now,
   });
 
+  // Trigger notification check for new task
+  console.log('[TaskService] Triggering notification check for new task:', newTask.id);
+  console.log('[TaskService] Task details:', {
+    title: newTask.title,
+    dueDate: newTask.dueDate,
+    estimatedHours: newTask.estimatedHours,
+    priority: newTask.priority
+  });
+  
+  checkNewTaskRisk(newTask.id, newTask.userId).catch(err => {
+    console.error('[TaskService] Failed to check new task risk:', err);
+  });
+
   return newTask;
 };
 
 /**
- * Get all tasks for a user
+ * ✅ OPTIMIZED: Get all tasks with caching
  */
-export const getTasks = async (userId: string): Promise<Task[]> => {
+export const getTasks = async (userId: string, useCache = true): Promise<Task[]> => {
+  console.log('[TaskService] getTasks called with userId:', userId);
+  console.log('[TaskService] Current auth user:', auth.currentUser?.uid);
+  
+  // ✅ Check cache first
+  const cacheKey = `tasks_${userId}`;
+  if (useCache) {
+    const cached = getCached<Task[]>(cacheKey);
+    if (cached) {
+      console.log('[TaskService] Returning cached tasks:', cached.length);
+      return cached;
+    }
+  }
+  
   const q = query(
     collection(db, TASKS_COLLECTION),
     where('userId', '==', userId),
     orderBy('dueDate', 'asc')
   );
 
+  console.log('[TaskService] Executing query...');
   const querySnapshot = await getDocs(q);
+  console.log('[TaskService] Query successful! Got', querySnapshot.size, 'tasks');
   const tasks: Task[] = [];
 
   querySnapshot.forEach((docSnap) => {
@@ -86,7 +141,64 @@ export const getTasks = async (userId: string): Promise<Task[]> => {
     });
   });
 
+  // ✅ Cache the results
+  setCache(cacheKey, tasks);
   return tasks;
+};
+
+/**
+ * ✅ NEW: Get tasks with pagination for large datasets
+ */
+export const getTasksPaginated = async (
+  userId: string,
+  pageSize: number = 20,
+  lastDoc?: any
+): Promise<{ tasks: Task[]; hasMore: boolean; lastDoc: any }> => {
+  let q = query(
+    collection(db, TASKS_COLLECTION),
+    where('userId', '==', userId),
+    orderBy('dueDate', 'asc'),
+    limit(pageSize + 1)
+  );
+
+  if (lastDoc) {
+    q = query(q, startAfter(lastDoc));
+  }
+
+  const querySnapshot = await getDocs(q);
+  const tasks: Task[] = [];
+  let lastDocument = null;
+  let index = 0;
+
+  querySnapshot.forEach((docSnap) => {
+    if (index < pageSize) {
+      const data = docSnap.data();
+      tasks.push({
+        id: docSnap.id,
+        userId: data.userId,
+        courseId: data.courseId,
+        title: data.title,
+        description: data.description,
+        type: data.type as TaskType,
+        priority: data.priority as TaskPriority,
+        status: data.status as TaskStatus,
+        dueDate: data.dueDate.toDate(),
+        estimatedHours: data.estimatedHours,
+        completedHours: data.completedHours,
+        reminderDate: data.reminderDate ? data.reminderDate.toDate() : undefined,
+        createdAt: data.createdAt.toDate(),
+        updatedAt: data.updatedAt.toDate(),
+      });
+    }
+    lastDocument = docSnap;
+    index++;
+  });
+
+  return {
+    tasks,
+    hasMore: querySnapshot.size > pageSize,
+    lastDoc: lastDocument,
+  };
 };
 
 /**
@@ -287,7 +399,7 @@ export const getOverdueTasks = async (userId: string): Promise<Task[]> => {
 };
 
 /**
- * Update task
+ * ✅ OPTIMIZED: Update task with cache invalidation
  */
 export const updateTask = async (
   id: string,
@@ -313,24 +425,51 @@ export const updateTask = async (
   delete updateData.createdAt;
 
   await updateDoc(taskRef, updateData);
+
+  // ✅ Invalidate cache after mutation
+  clearTaskCache();
+
+  // Trigger notification check after update
+  if (updates.userId) {
+    triggerNotificationCheck(updates.userId).catch(err => {
+      console.error('Failed to trigger notification check:', err);
+    });
+  }
 };
 
 /**
  * Mark task as completed
  */
-export const completeTask = async (id: string): Promise<void> => {
+export const completeTask = async (id: string, userId?: string): Promise<void> => {
   await updateTask(id, { status: TaskStatus.COMPLETED });
+  
+  // Trigger notification check after completion
+  if (userId) {
+    triggerNotificationCheck(userId).catch(err => {
+      console.error('Failed to trigger notification check:', err);
+    });
+  }
 };
 
 /**
- * Delete task
+ * ✅ OPTIMIZED: Delete task with cache invalidation
  */
-export const deleteTask = async (id: string): Promise<void> => {
+export const deleteTask = async (id: string, userId?: string): Promise<void> => {
   await deleteDoc(doc(db, TASKS_COLLECTION, id));
+  
+  // ✅ Invalidate cache after deletion
+  clearTaskCache();
+  
+  // Trigger notification check after deletion
+  if (userId) {
+    triggerNotificationCheck(userId).catch(err => {
+      console.error('Failed to trigger notification check:', err);
+    });
+  }
 };
 
 /**
- * Get task statistics
+ * ✅ OPTIMIZED: Get task statistics with caching and single-pass calculation
  */
 export const getTaskStats = async (
   userId: string
@@ -341,30 +480,99 @@ export const getTaskStats = async (
   overdue: number;
   upcoming: number;
 }> => {
-  const tasks = await getTasks(userId);
+  const cacheKey = `taskStats_${userId}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return cached;
+
+  // Get tasks from cache if available
+  const tasks = await getTasks(userId, true);
   const today = new Date();
   const nextWeek = new Date();
   nextWeek.setDate(today.getDate() + 7);
 
-  return {
+  // ✅ OPTIMIZED: Single pass through array (O(n) instead of O(5n))
+  const stats = {
     total: tasks.length,
-    completed: tasks.filter((t) => t.status === TaskStatus.COMPLETED).length,
-    inProgress: tasks.filter((t) => t.status === TaskStatus.IN_PROGRESS).length,
-    overdue: tasks.filter(
-      (t) => t.dueDate < today && t.status !== TaskStatus.COMPLETED
-    ).length,
-    upcoming: tasks.filter(
-      (t) =>
-        t.dueDate >= today &&
-        t.dueDate <= nextWeek &&
-        t.status !== TaskStatus.COMPLETED
-    ).length,
+    completed: 0,
+    inProgress: 0,
+    overdue: 0,
+    upcoming: 0,
   };
+
+  tasks.forEach((task) => {
+    if (task.status === TaskStatus.COMPLETED) {
+      stats.completed++;
+    } else if (task.status === TaskStatus.IN_PROGRESS) {
+      stats.inProgress++;
+    }
+
+    if (task.dueDate < today && task.status !== TaskStatus.COMPLETED) {
+      stats.overdue++;
+    }
+
+    if (
+      task.dueDate >= today &&
+      task.dueDate <= nextWeek &&
+      task.status !== TaskStatus.COMPLETED
+    ) {
+      stats.upcoming++;
+    }
+  });
+
+  setCache(cacheKey, stats);
+  return stats;
+};
+
+/**
+ * ✅ NEW: Batch create multiple tasks efficiently
+ */
+export const batchCreateTasks = async (
+  tasks: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>[]
+): Promise<Task[]> => {
+  const now = Timestamp.now();
+  const createdTasks: Task[] = [];
+
+  // Create all tasks in parallel
+  await Promise.all(
+    tasks.map(async (task) => {
+      const taskRef = doc(collection(db, TASKS_COLLECTION));
+      const newTask: Task = {
+        ...task,
+        id: taskRef.id,
+        createdAt: now.toDate(),
+        updatedAt: now.toDate(),
+      };
+
+      await setDoc(taskRef, {
+        userId: newTask.userId,
+        courseId: newTask.courseId,
+        title: newTask.title,
+        description: newTask.description || null,
+        type: newTask.type,
+        priority: newTask.priority,
+        status: newTask.status,
+        dueDate: Timestamp.fromDate(task.dueDate),
+        estimatedHours: newTask.estimatedHours || null,
+        completedHours: newTask.completedHours || null,
+        reminderDate: task.reminderDate
+          ? Timestamp.fromDate(task.reminderDate)
+          : null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      createdTasks.push(newTask);
+    })
+  );
+
+  clearTaskCache();
+  return createdTasks;
 };
 
 export default {
   createTask,
   getTasks,
+  getTasksPaginated,
   getTaskById,
   getTasksByStatus,
   getTasksByCourse,
@@ -374,4 +582,6 @@ export default {
   completeTask,
   deleteTask,
   getTaskStats,
+  batchCreateTasks,
+  clearTaskCache,
 };

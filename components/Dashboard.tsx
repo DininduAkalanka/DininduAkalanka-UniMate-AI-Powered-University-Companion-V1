@@ -5,15 +5,15 @@ import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
-  FlatList,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Dimensions,
+    FlatList,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { COLORS } from '../constants/config';
 import { COLORS_V2, ELEVATION, RADIUS, SPACING, TYPOGRAPHY } from '../constants/designSystem';
@@ -41,6 +41,8 @@ export default function Dashboard({ userId }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showCoursesModal, setShowCoursesModal] = useState(false);
+  const [showChatButton, setShowChatButton] = useState(true);
+  const scrollYRef = React.useRef(0);
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -62,17 +64,21 @@ export default function Dashboard({ userId }: DashboardProps) {
     try {
       setLoading(true);
       
-      const [
-        tasksData,
-        coursesData,
-        statsData,
-        studyData,
-      ] = await Promise.all([
-        getTasks(userId),
-        getCourses(userId),
-        getTaskStats(userId),
-        getStudyStats(userId, 7),
-      ]);
+      console.log('[Dashboard] Loading tasks...');
+      const tasksData = await getTasks(userId);
+      console.log('[Dashboard] Tasks loaded:', tasksData.length);
+      
+      console.log('[Dashboard] Loading courses...');
+      const coursesData = await getCourses(userId);
+      console.log('[Dashboard] Courses loaded:', coursesData.length);
+      
+      console.log('[Dashboard] Loading task stats...');
+      const statsData = await getTaskStats(userId);
+      console.log('[Dashboard] Task stats loaded');
+      
+      console.log('[Dashboard] Loading study stats...');
+      const studyData = await getStudyStats(userId, 7);
+      console.log('[Dashboard] Study stats loaded');
 
       setTasks(tasksData);
       setCourses(coursesData);
@@ -80,10 +86,12 @@ export default function Dashboard({ userId }: DashboardProps) {
       setStudyStats(studyData);
 
       // Get deadline predictions for upcoming tasks
+      console.log('[Dashboard] Loading predictions...');
       const upcomingTasks = tasksData.filter(
         t => t.status !== TaskStatus.COMPLETED && t.dueDate > new Date()
       );
       const predictionsData = await predictDeadlineRisks(upcomingTasks);
+      console.log('[Dashboard] Predictions loaded:', predictionsData.length);
       setPredictions(predictionsData.slice(0, 3)); // Top 3 at-risk tasks
 
     } catch (error) {
@@ -98,6 +106,25 @@ export default function Dashboard({ userId }: DashboardProps) {
     setRefreshing(true);
     loadDashboardData();
   }, [userId]);
+
+  // Smart scroll behavior for chat button
+  const handleScroll = useCallback((event: any) => {
+    const currentScrollY = event.nativeEvent.contentOffset.y;
+    const delta = currentScrollY - scrollYRef.current;
+    
+    // Show button when scrolling up or at top, hide when scrolling down
+    if (currentScrollY < 50) {
+      setShowChatButton(true);
+    } else if (delta < -5) {
+      // Scrolling up
+      setShowChatButton(true);
+    } else if (delta > 5) {
+      // Scrolling down
+      setShowChatButton(false);
+    }
+    
+    scrollYRef.current = currentScrollY;
+  }, []);
 
   const upcomingTasks = useMemo(() => 
     tasks
@@ -138,6 +165,8 @@ export default function Dashboard({ userId }: DashboardProps) {
     <ScrollView
       style={styles.container}
       keyboardShouldPersistTaps="handled"
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
@@ -411,7 +440,6 @@ export default function Dashboard({ userId }: DashboardProps) {
             { icon: '📚', label: 'All Courses', action: () => setShowCoursesModal(true) },
             { icon: '📅', label: 'Study Planner', route: '/planner' },
             { icon: '🕐', label: 'Timetable', route: '/timetable' },
-            { icon: '🤖', label: 'AI Assistant', route: '/chat' },
           ].map((action, index) => (
             <MotiView
               key={index}
@@ -444,6 +472,38 @@ export default function Dashboard({ userId }: DashboardProps) {
         </View>
       </View>
     </ScrollView>
+
+    {/* Floating Chat Assistant Button */}
+    {showChatButton && (
+      <MotiView
+        from={{ scale: 0, opacity: 0, translateX: 100 }}
+        animate={{ scale: 1, opacity: 1, translateX: 0 }}
+        exit={{ scale: 0, opacity: 0, translateX: 100 }}
+        transition={{ type: 'spring', damping: 15, stiffness: 150 }}
+        style={styles.chatFab}
+      >
+        <TouchableOpacity
+          style={styles.chatButton}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push('/chat' as any);
+          }}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#8B5CF6', '#7C3AED']}
+            style={styles.chatGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={styles.chatIcon}>🤖</Text>
+          </LinearGradient>
+          <View style={styles.chatBadge}>
+            <Text style={styles.chatBadgeText}>AI</Text>
+          </View>
+        </TouchableOpacity>
+      </MotiView>
+    )}
 
     {/* Courses Modal */}
     <Modal
@@ -925,5 +985,46 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.labelLarge,
     fontWeight: '700',
     color: COLORS_V2.text.inverse,
+  },
+  // Floating Chat Assistant Button
+  chatFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    zIndex: 999,
+  },
+  chatButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    ...ELEVATION.xl,
+  },
+  chatGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatIcon: {
+    fontSize: 28,
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#10B981',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 2,
+    borderColor: COLORS_V2.background.primary,
+    ...ELEVATION.md,
+  },
+  chatBadgeText: {
+    ...TYPOGRAPHY.labelSmall,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

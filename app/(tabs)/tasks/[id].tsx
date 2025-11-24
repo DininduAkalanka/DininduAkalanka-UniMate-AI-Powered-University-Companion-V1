@@ -6,23 +6,23 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/config';
-import { getCurrentUser } from '../../services/authService';
-import { getCourses } from '../../services/courseServiceFirestore';
-import { deleteTask, getTaskById, updateTask } from '../../services/taskServiceFirestore';
-import { Course, Task, TaskPriority, TaskStatus, TaskType } from '../../types';
+import { COLORS } from '../../../constants/config';
+import { getCurrentUser } from '../../../services/authService';
+import { getCourses } from '../../../services/courseServiceFirestore';
+import { deleteTask, getTaskById, updateTask } from '../../../services/taskServiceFirestore';
+import { Course, Task, TaskPriority, TaskStatus, TaskType } from '../../../types';
 
 export default function TaskDetailScreen() {
   const router = useRouter();
@@ -51,6 +51,13 @@ export default function TaskDetailScreen() {
 
   const initialize = async () => {
     try {
+      // Validate task ID
+      if (!id || typeof id !== 'string') {
+        Alert.alert('Error', 'Invalid task ID');
+        router.back();
+        return;
+      }
+
       const user = await getCurrentUser();
       if (!user) {
         router.replace('/');
@@ -85,6 +92,7 @@ export default function TaskDetailScreen() {
     } catch (error) {
       console.error('Initialization error:', error);
       Alert.alert('Error', 'Failed to load task');
+      router.back();
     } finally {
       setLoading(false);
     }

@@ -5,9 +5,14 @@
  */
 
 import { HfInference } from '@huggingface/inference';
+import Constants from 'expo-constants';
+import { errorTracker } from '../utils/errorTracking';
+import { chatRateLimiter } from '../utils/rateLimiter';
 
-// Configuration
-const HF_API_KEY = process.env.EXPO_PUBLIC_HUGGING_FACE_API_KEY || '';
+// Configuration - Load from environment variables
+const HF_API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_HUGGING_FACE_API_KEY || 
+  process.env.EXPO_PUBLIC_HUGGING_FACE_API_KEY || 
+  '';
 const USE_FREE_TIER = true; // Set to true to use free inference API
 
 // Initialize Hugging Face client ONLY if API key exists
@@ -76,6 +81,7 @@ Guidelines:
 /**
  * Generate AI response using Hugging Face Inference API
  * With automatic fallback to alternative models and offline mode
+ * Includes rate limiting protection
  */
 export async function generateAIResponse(
   userMessage: string,
@@ -83,6 +89,7 @@ export async function generateAIResponse(
     maxTokens?: number;
     temperature?: number;
     useContext?: boolean;
+    userId?: string;
   } = {}
 ): Promise<{ text: string; success: boolean; error?: string }> {
   try {
@@ -90,7 +97,24 @@ export async function generateAIResponse(
       maxTokens = 500,
       temperature = 0.7,
       useContext = true,
+      userId = 'anonymous',
     } = options;
+
+    // Check rate limit
+    const rateLimitResult = await chatRateLimiter.checkLimit(userId);
+    if (!rateLimitResult.allowed) {
+      errorTracker.captureMessage(
+        `Rate limit exceeded for user ${userId}`,
+        'warning',
+        { action: 'ai_chat', metadata: { retryAfter: rateLimitResult.retryAfter } }
+      );
+      
+      return {
+        text: `⚠️ You're sending messages too quickly. Please wait ${rateLimitResult.retryAfter} seconds before trying again.\n\nThis helps us ensure fair usage for all students.`,
+        success: false,
+        error: 'rate_limit_exceeded',
+      };
+    }
 
     // If offline mode, use intelligent fallback immediately
     if (isOfflineMode) {
@@ -198,6 +222,15 @@ export async function generateAIResponse(
     
   } catch (error: any) {
     console.error('AI generation error:', error);
+    
+    // Track error
+    errorTracker.captureError(error, {
+      action: 'ai_generation',
+      metadata: {
+        userMessage: userMessage.substring(0, 100), // Only first 100 chars for privacy
+        options,
+      },
+    });
     
     // Return enhanced fallback
     return {

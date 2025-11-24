@@ -1,29 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { COLORS } from '../constants/config';
 import { ILLUSTRATIONS } from '../constants/illustrations';
 import { getCurrentUser } from '../services/authService';
 import { getCourses } from '../services/courseServiceFirestore';
+import {
+  createTimetableEntry,
+  deleteTimetableEntry,
+  getTimetableEntries,
+  updateTimetableEntry,
+} from '../services/timetableServiceFirestore';
 import { Course } from '../types';
 
 interface TimeSlot {
@@ -45,6 +49,9 @@ const TIME_SLOTS = [
 export default function TimetableScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -53,16 +60,54 @@ export default function TimetableScreen() {
   // Form state
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [selectedCourse, setSelectedCourse] = useState('');
-  const [startTime, setStartTime] = useState(new Date());
-  const [endTime, setEndTime] = useState(new Date());
+  const [startHour, setStartHour] = useState('09');
+  const [startMinute, setStartMinute] = useState('00');
+  const [endHour, setEndHour] = useState('10');
+  const [endMinute, setEndMinute] = useState('00');
   const [location, setLocation] = useState('');
   const [classType, setClassType] = useState<'lecture' | 'lab' | 'tutorial' | 'other'>('lecture');
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Auto-refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        loadTimetableData();
+      }
+    }, [userId])
+  );
+
+  const loadTimetableData = async () => {
+    if (!userId) return;
+    try {
+      const entries = await getTimetableEntries(userId);
+      const slots: TimeSlot[] = entries.map(entry => ({
+        id: entry.id,
+        day: getDayName(entry.dayOfWeek),
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        courseId: entry.courseId,
+        location: entry.location,
+        type: entry.type || 'lecture',
+      }));
+      setTimeSlots(slots);
+    } catch (error) {
+      console.error('Error loading timetable:', error);
+    }
+  };
+
+  const getDayName = (dayOfWeek: number): string => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[dayOfWeek] || 'Monday';
+  };
+
+  const getDayNumber = (dayName: string): number => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days.indexOf(dayName);
+  };
 
   const loadData = async () => {
     try {
@@ -72,13 +117,23 @@ export default function TimetableScreen() {
         return;
       }
 
+      setUserId(user.id);
+
       const fetchedCourses = await getCourses(user.id);
       setCourses(fetchedCourses);
 
-      // Load timetable from storage (in real app, this would be from Firestore)
-      // For now, using demo data
-      const demoSlots: TimeSlot[] = [];
-      setTimeSlots(demoSlots);
+      // Load timetable from Firestore
+      const entries = await getTimetableEntries(user.id);
+      const slots: TimeSlot[] = entries.map(entry => ({
+        id: entry.id,
+        day: getDayName(entry.dayOfWeek),
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        courseId: entry.courseId,
+        location: entry.location,
+        type: entry.type || 'lecture',
+      }));
+      setTimeSlots(slots);
     } catch (error) {
       console.error('Load data error:', error);
       Alert.alert('Error', 'Failed to load timetable data');
@@ -123,24 +178,21 @@ export default function TimetableScreen() {
     }
   };
 
-  const formatTime = (date: Date): string => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
+  const formatTime = (hour: string, minute: string): string => {
+    return `${hour}:${minute}`;
   };
+
+  const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
+  const minutes = ['00', '15', '30', '45'];
 
   const openAddModal = () => {
     setEditingSlot(null);
     setSelectedDay('Monday');
     setSelectedCourse(courses[0]?.id || '');
-    const now = new Date();
-    now.setHours(9, 0, 0, 0);
-    setStartTime(now);
-    const later = new Date(now);
-    later.setHours(10, 0, 0, 0);
-    setEndTime(later);
+    setStartHour('09');
+    setStartMinute('00');
+    setEndHour('10');
+    setEndMinute('00');
     setLocation('');
     setClassType('lecture');
     setShowAddModal(true);
@@ -151,49 +203,79 @@ export default function TimetableScreen() {
     setSelectedDay(slot.day);
     setSelectedCourse(slot.courseId);
     
-    const [startHour, startMin] = slot.startTime.split(':');
-    const start = new Date();
-    start.setHours(parseInt(startHour), parseInt(startMin), 0, 0);
-    setStartTime(start);
+    const [startH, startM] = slot.startTime.split(':');
+    setStartHour(startH);
+    setStartMinute(startM);
     
-    const [endHour, endMin] = slot.endTime.split(':');
-    const end = new Date();
-    end.setHours(parseInt(endHour), parseInt(endMin), 0, 0);
-    setEndTime(end);
+    const [endH, endM] = slot.endTime.split(':');
+    setEndHour(endH);
+    setEndMinute(endM);
     
     setLocation(slot.location || '');
     setClassType(slot.type);
     setShowAddModal(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!userId) return;
+
     if (!selectedCourse) {
       Alert.alert('Error', 'Please select a course');
       return;
     }
 
-    if (startTime >= endTime) {
+    const startTimeNum = parseInt(startHour) * 60 + parseInt(startMinute);
+    const endTimeNum = parseInt(endHour) * 60 + parseInt(endMinute);
+
+    if (startTimeNum >= endTimeNum) {
       Alert.alert('Error', 'End time must be after start time');
       return;
     }
 
-    const newSlot: TimeSlot = {
-      id: editingSlot?.id || Date.now().toString(),
-      day: selectedDay,
-      startTime: formatTime(startTime),
-      endTime: formatTime(endTime),
-      courseId: selectedCourse,
-      location,
-      type: classType,
-    };
+    setSaving(true);
+    try {
+      const entryData: any = {
+        userId,
+        courseId: selectedCourse,
+        dayOfWeek: getDayNumber(selectedDay),
+        startTime: formatTime(startHour, startMinute),
+        endTime: formatTime(endHour, endMinute),
+        type: classType,
+      };
+      
+      // Only add location if it has a value
+      if (location && location.trim()) {
+        entryData.location = location.trim();
+      }
 
-    if (editingSlot) {
-      setTimeSlots(timeSlots.map(slot => slot.id === editingSlot.id ? newSlot : slot));
-    } else {
-      setTimeSlots([...timeSlots, newSlot]);
+      if (editingSlot) {
+        // Update existing entry - only include location if it exists
+        const updateData: any = {
+          courseId: entryData.courseId,
+          dayOfWeek: entryData.dayOfWeek,
+          startTime: entryData.startTime,
+          endTime: entryData.endTime,
+          type: entryData.type,
+        };
+        if (entryData.location) {
+          updateData.location = entryData.location;
+        }
+        await updateTimetableEntry(editingSlot.id, updateData);
+      } else {
+        // Create new entry
+        await createTimetableEntry(entryData);
+      }
+
+      // Reload data from Firestore
+      await loadTimetableData();
+      setShowAddModal(false);
+      Alert.alert('Success', `Class ${editingSlot ? 'updated' : 'added'} successfully`);
+    } catch (error) {
+      console.error('Error saving timetable entry:', error);
+      Alert.alert('Error', 'Failed to save timetable entry');
+    } finally {
+      setSaving(false);
     }
-
-    setShowAddModal(false);
   };
 
   const handleDelete = (slotId: string) => {
@@ -205,7 +287,19 @@ export default function TimetableScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => setTimeSlots(timeSlots.filter(slot => slot.id !== slotId)),
+          onPress: async () => {
+            setDeleting(slotId);
+            try {
+              await deleteTimetableEntry(slotId);
+              await loadTimetableData();
+              Alert.alert('Success', 'Class deleted successfully');
+            } catch (error) {
+              console.error('Error deleting timetable entry:', error);
+              Alert.alert('Error', 'Failed to delete class');
+            } finally {
+              setDeleting(null);
+            }
+          },
         },
       ]
     );
@@ -337,18 +431,26 @@ export default function TimetableScreen() {
                         const slot = getSlotForDayAndTime(day, time);
                         const course = slot ? getCourseForSlot(slot) : null;
                         
+                        const isDeleting = slot && deleting === slot.id;
+                        
                         return (
                           <TouchableOpacity
                             key={day}
                             style={[
                               styles.dayColumn,
                               slot && styles.slotFilled,
-                              { backgroundColor: course?.color || '#f5f5f5' },
+                              { 
+                                backgroundColor: course?.color || '#f5f5f5',
+                                opacity: isDeleting ? 0.5 : 1,
+                              },
                             ]}
-                            onPress={() => slot && openEditModal(slot)}
-                            onLongPress={() => slot && handleDelete(slot.id)}
+                            onPress={() => slot && !isDeleting && openEditModal(slot)}
+                            onLongPress={() => slot && !isDeleting && handleDelete(slot.id)}
+                            disabled={!!isDeleting}
                           >
-                            {slot && course && (
+                            {isDeleting ? (
+                              <ActivityIndicator color="#fff" size="small" />
+                            ) : slot && course ? (
                               <View style={styles.slotContent}>
                                 <Text style={styles.slotType}>{getTypeIcon(slot.type)}</Text>
                                 <Text style={styles.slotCourse} numberOfLines={2}>
@@ -360,7 +462,7 @@ export default function TimetableScreen() {
                                   </Text>
                                 )}
                               </View>
-                            )}
+                            ) : null}
                           </TouchableOpacity>
                         );
                       })}
@@ -476,49 +578,63 @@ export default function TimetableScreen() {
 
               {/* Start Time */}
               <Text style={styles.inputLabel}>Start Time</Text>
-              <TouchableOpacity
-                style={styles.timeButton}
-                onPress={() => setShowStartPicker(true)}
-              >
-                <Text style={styles.timeButtonText}>{formatTime(startTime)}</Text>
-                <Ionicons name="time-outline" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
-
-              {showStartPicker && (
-                <DateTimePicker
-                  value={startTime}
-                  mode="time"
-                  is24Hour={true}
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, date) => {
-                    setShowStartPicker(Platform.OS === 'ios');
-                    if (date) setStartTime(date);
-                  }}
-                />
-              )}
+              <View style={styles.timePickerRow}>
+                <View style={[styles.pickerContainer, { flex: 1 }]}>
+                  <Picker
+                    selectedValue={startHour}
+                    onValueChange={setStartHour}
+                    style={styles.picker}
+                    mode="dropdown"
+                  >
+                    {hours.map(hour => (
+                      <Picker.Item key={hour} label={hour} value={hour} />
+                    ))}
+                  </Picker>
+                </View>
+                <Text style={styles.timeSeparator}>:</Text>
+                <View style={[styles.pickerContainer, { flex: 1 }]}>
+                  <Picker
+                    selectedValue={startMinute}
+                    onValueChange={setStartMinute}
+                    style={styles.picker}
+                    mode="dropdown"
+                  >
+                    {minutes.map(minute => (
+                      <Picker.Item key={minute} label={minute} value={minute} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
 
               {/* End Time */}
               <Text style={styles.inputLabel}>End Time</Text>
-              <TouchableOpacity
-                style={styles.timeButton}
-                onPress={() => setShowEndPicker(true)}
-              >
-                <Text style={styles.timeButtonText}>{formatTime(endTime)}</Text>
-                <Ionicons name="time-outline" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
-
-              {showEndPicker && (
-                <DateTimePicker
-                  value={endTime}
-                  mode="time"
-                  is24Hour={true}
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, date) => {
-                    setShowEndPicker(Platform.OS === 'ios');
-                    if (date) setEndTime(date);
-                  }}
-                />
-              )}
+              <View style={styles.timePickerRow}>
+                <View style={[styles.pickerContainer, { flex: 1 }]}>
+                  <Picker
+                    selectedValue={endHour}
+                    onValueChange={setEndHour}
+                    style={styles.picker}
+                    mode="dropdown"
+                  >
+                    {hours.map(hour => (
+                      <Picker.Item key={hour} label={hour} value={hour} />
+                    ))}
+                  </Picker>
+                </View>
+                <Text style={styles.timeSeparator}>:</Text>
+                <View style={[styles.pickerContainer, { flex: 1 }]}>
+                  <Picker
+                    selectedValue={endMinute}
+                    onValueChange={setEndMinute}
+                    style={styles.picker}
+                    mode="dropdown"
+                  >
+                    {minutes.map(minute => (
+                      <Picker.Item key={minute} label={minute} value={minute} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
 
               {/* Type */}
               <Text style={styles.inputLabel}>Type</Text>
@@ -555,14 +671,21 @@ export default function TimetableScreen() {
               />
 
               {/* Save Button */}
-              <TouchableOpacity onPress={handleSave}>
+              <TouchableOpacity onPress={handleSave} disabled={saving}>
                 <LinearGradient
-                  colors={[COLORS.primary, COLORS.secondary]}
+                  colors={saving ? ['#ccc', '#aaa'] : [COLORS.primary, COLORS.secondary]}
                   style={styles.saveButton}
                 >
-                  <Text style={styles.saveButtonText}>
-                    {editingSlot ? 'Update Class' : 'Add Class'}
-                  </Text>
+                  {saving ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={styles.saveButtonText}>Saving...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.saveButtonText}>
+                      {editingSlot ? 'Update Class' : 'Add Class'}
+                    </Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </ScrollView>
@@ -733,7 +856,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   gridBody: {
-    maxHeight: 500,
+    maxHeight: 800,
   },
   emptyState: {
     backgroundColor: '#fff',
@@ -853,6 +976,17 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timeSeparator: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginTop: 8,
   },
   timeButton: {
     flexDirection: 'row',
