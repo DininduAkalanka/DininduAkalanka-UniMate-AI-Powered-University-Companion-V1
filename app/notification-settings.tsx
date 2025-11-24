@@ -225,8 +225,8 @@ export default function NotificationSettingsScreen() {
               icon="time"
               iconColor="#3B82F6"
               title="Peak Time Reminders"
-              description="Alerts during your most productive hours"
-              badge="Phase 2"
+              description="ML-powered alerts during your most productive hours"
+              badge="ML"
               value={settings.peakTimeReminders}
               onChange={(value) => updateSetting('peakTimeReminders', value)}
               disabled={!settings.enabled}

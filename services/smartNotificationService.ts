@@ -2,13 +2,20 @@
  * Smart Notification Service
  * AI-powered notification triggers based on predictions
  * Phase 1: Deadline Risk & Workload Alerts
+ * Phase 2: Peak Time Reminders, Burnout Detection, Achievements
  */
 
 import { TaskStatus } from '../types';
 import { NotificationPriority, NotificationType } from '../types/notification';
+import { analyzeBurnoutRisk, shouldSendBurnoutAlert } from './burnoutDetector';
 import { notificationManager } from './notificationManager';
+import { getPeakTimeRecommendation } from './peakTimeAnalyzer';
 import { analyzeWorkload, predictDeadlineRisks } from './predictionService';
 import { getTasks } from './taskServiceFirestore';
+
+// Error tracking to prevent console spam
+let lastAuthWarningTime = 0;
+const AUTH_WARNING_COOLDOWN = 60000; // Show warning once per minute
 
 /**
  * PHASE 1: CORE FEATURES
@@ -21,9 +28,31 @@ export async function checkDeadlineRisks(userId: string): Promise<void> {
   try {
     console.log('\n🔍 [DEADLINE RISK CHECK] Starting check...');
     console.log('⏰ Time:', new Date().toLocaleString());
+    console.log('👤 User ID:', userId);
     
-    // Get all incomplete tasks
+    // Verify Firebase Auth is ready
+    const { auth } = await import('../firebase/firebaseint');
+    
+    if (!auth.currentUser) {
+      // Only log warning once per minute to avoid spam
+      const now = Date.now();
+      if (now - lastAuthWarningTime > AUTH_WARNING_COOLDOWN) {
+        console.log('⚠️ [Smart Notifications] Waiting for user authentication...');
+        lastAuthWarningTime = now;
+      }
+      return;
+    }
+    
+    if (auth.currentUser.uid !== userId) {
+      return; // Silent skip for ID mismatch
+    }
+    
+    console.log('✅ [DEADLINE RISK CHECK] User authenticated, proceeding...');
+    console.log('📥 Fetching tasks from Firestore...');
+    
+    // Get all incomplete tasks (NOW user is authenticated)
     const allTasks = await getTasks(userId);
+    console.log('✅ Tasks fetched successfully');
     const incompleteTasks = allTasks.filter(t => t.status !== TaskStatus.COMPLETED);
     
     console.log('📋 Total tasks:', allTasks.length);
@@ -168,8 +197,11 @@ export async function checkDeadlineRisks(userId: string): Promise<void> {
     console.log('   📝 Medium:', mediumCount);
     console.log('   Total checked:', predictions.length);
     console.log('✅ [DEADLINE RISK CHECK] Complete\n');
-  } catch (error) {
-    console.error('[Smart Notifications] Error checking deadline risks:', error);
+  } catch (error: any) {
+    // Suppress Firebase permission errors (they're expected when not authenticated)
+    if (!error?.message?.includes('Missing or insufficient permissions')) {
+      console.error('[Smart Notifications] Error checking deadline risks:', error);
+    }
   }
 }
 
@@ -180,14 +212,31 @@ export async function checkWorkloadAlerts(userId: string): Promise<void> {
   try {
     console.log('\n📊 [WORKLOAD CHECK] Starting workload analysis...');
     console.log('⏰ Time:', new Date().toLocaleString());
+    console.log('👤 User ID:', userId);
+    
+    // Verify Firebase Auth is ready
+    const { auth } = await import('../firebase/firebaseint');
+    
+    if (!auth.currentUser) {
+      // Silent skip - deadline check already logged the warning
+      return;
+    }
+    
+    if (auth.currentUser.uid !== userId) {
+      return; // Silent skip for ID mismatch
+    }
+    
+    console.log('✅ [WORKLOAD CHECK] User authenticated, proceeding...');
+    console.log('📥 Fetching tasks from Firestore...');
     
     const tasks = await getTasks(userId);
+    console.log('✅ Tasks fetched successfully');
     const workload = await analyzeWorkload(tasks, userId);
     
     console.log('📈 Workload Analysis:');
-    console.log('   Level:', workload.level.toUpperCase());
-    console.log('   Hours/week:', workload.hoursPerWeek.toFixed(1));
-    console.log('   Active tasks:', workload.activeTasks);
+    console.log('   Total hours needed:', workload.totalHoursNeeded.toFixed(1));
+    console.log('   Average hours/day:', workload.averageHoursPerDay.toFixed(1));
+    console.log('   Is overloaded:', workload.isOverloaded);
     
     // CRITICAL: Severely overloaded (>12h/day)
     if (workload.averageHoursPerDay > 12) {
@@ -298,9 +347,12 @@ export async function checkWorkloadAlerts(userId: string): Promise<void> {
 
     console.log('\n✅ [WORKLOAD CHECK] Complete');
     console.log('   Average hours/day:', workload.averageHoursPerDay.toFixed(1));
-    console.log('   Level:', workload.level.toUpperCase(), '\n');
-  } catch (error) {
-    console.error('[Smart Notifications] Error checking workload:', error);
+    console.log('   Total hours needed:', workload.totalHoursNeeded.toFixed(1), '\n');
+  } catch (error: any) {
+    // Suppress Firebase permission errors (they're expected when not authenticated)
+    if (!error?.message?.includes('Missing or insufficient permissions')) {
+      console.error('[Smart Notifications] Error checking workload:', error);
+    }
   }
 }
 
@@ -407,21 +459,22 @@ export async function initializeNotifications(userId: string): Promise<boolean> 
   try {
     console.log('[Smart Notifications] Initializing for user:', userId);
     
-    // Initialize notification manager
-    const initialized = await notificationManager.initialize();
+    // Initialize notification manager WITH userId to enable ML features
+    const initialized = await notificationManager.initialize(userId);
     
     if (!initialized) {
       console.warn('[Smart Notifications] Initialization failed');
       return false;
     }
 
-    // DON'T run Phase 1 checks on initialization
-    // They will run later when the dashboard loads and auth is ready
-    console.log('[Smart Notifications] Initialization complete (checks deferred until auth ready)');
+    console.log('[Smart Notifications] Initialization complete (ML features enabled)');
     
-    return true;
+    // Run initial Phase 1 checks to trigger any immediate notifications
+    console.log('[Smart Notifications] Running initial checks...');
+    runPhase1Checks(userId).catch(err => {
+      console.error('[Smart Notifications] Initial checks failed:', err);
+    });
     
-    console.log('[Smart Notifications] Initialization complete');
     return true;
   } catch (error) {
     console.error('[Smart Notifications] Initialization error:', error);
@@ -461,11 +514,225 @@ export async function sendTestNotification(userId: string): Promise<void> {
   }
 }
 
+/**
+ * PHASE 2: ENHANCEMENT FEATURES
+ */
+
+/**
+ * Send peak time reminder if user is in productive hour
+ */
+export async function checkPeakTimeReminder(userId: string): Promise<void> {
+  try {
+    console.log('\n🕐 [PEAK TIME CHECK] Starting check...');
+    console.log('⏰ Current time:', new Date().toLocaleString());
+    console.log('👤 User ID:', userId);
+    
+    // Verify Firebase Auth is ready
+    const { auth } = await import('../firebase/firebaseint');
+    
+    if (!auth.currentUser || auth.currentUser.uid !== userId) {
+      console.log('⚠️ [PEAK TIME CHECK] Firebase Auth not ready or ID mismatch, skipping check');
+      return;
+    }
+    
+    console.log('✅ [PEAK TIME CHECK] User authenticated, proceeding...');
+    
+    // Get incomplete tasks
+    const tasks = await getTasks(userId);
+    const incompleteTasks = tasks.filter(t => t.status !== TaskStatus.COMPLETED);
+    const hasPendingTasks = incompleteTasks.length > 0;
+    
+    console.log('📋 Pending tasks:', incompleteTasks.length);
+    
+    // Get peak time recommendation
+    const recommendation = await getPeakTimeRecommendation(userId, hasPendingTasks);
+    
+    console.log('🎯 Recommendation:', recommendation.reason);
+    console.log('📊 Confidence:', recommendation.confidence.toUpperCase());
+    
+    if (!recommendation.shouldSendReminder) {
+      console.log('✓ [Peak Time] No reminder needed at this time\n');
+      return;
+    }
+    
+    // Get high-priority tasks for the message
+    const highPriorityTasks = incompleteTasks
+      .filter(t => t.priority === 'high' || t.priority === 'urgent')
+      .slice(0, 3);
+    
+    const taskList = highPriorityTasks.length > 0
+      ? highPriorityTasks.map(t => `• ${t.title}`).join('\n')
+      : incompleteTasks.slice(0, 3).map(t => `• ${t.title}`).join('\n');
+    
+    console.log('🔔 Sending peak time reminder...');
+    
+    await notificationManager.sendSmart({
+      userId,
+      type: NotificationType.PEAK_TIME_REMINDER,
+      priority: NotificationPriority.MEDIUM,
+      title: '🌟 Your Peak Time is Now!',
+      body: `You're most productive at this hour. Ready to tackle some tasks?`,
+      emoji: '🌟',
+      color: '#10B981',
+      action: 'OPEN_TASKS',
+      actionData: {
+        screen: 'Tasks',
+      },
+      data: {
+        peakHour: recommendation.nextPeakHour,
+        confidence: recommendation.confidence,
+        taskCount: incompleteTasks.length,
+        topTasks: highPriorityTasks.map(t => ({ id: t.id, title: t.title })),
+      },
+      category: 'peak_time',
+    });
+    
+    console.log('✅ [Peak Time] Reminder sent successfully\n');
+    
+  } catch (error) {
+    console.error('❌ [Peak Time] Check failed:', error);
+  }
+}
+
+/**
+ * Check burnout risk and send warning if needed
+ */
+export async function checkBurnoutRisk(userId: string): Promise<void> {
+  try {
+    console.log('\n🔥 [BURNOUT CHECK] Starting burnout risk assessment...');
+    console.log('⏰ Time:', new Date().toLocaleString());
+    console.log('👤 User ID:', userId);
+    
+    // Verify Firebase Auth is ready
+    const { auth } = await import('../firebase/firebaseint');
+    
+    if (!auth.currentUser || auth.currentUser.uid !== userId) {
+      console.log('⚠️ [BURNOUT CHECK] Firebase Auth not ready or ID mismatch, skipping check');
+      return;
+    }
+    
+    console.log('✅ [BURNOUT CHECK] User authenticated, proceeding...');
+    
+    // Analyze burnout risk
+    const analysis = await analyzeBurnoutRisk(userId);
+    
+    console.log('📊 Risk Level:', analysis.riskLevel.toUpperCase());
+    console.log('📈 Risk Score:', analysis.riskScore + '/100');
+    console.log('⚠️ Indicators detected:', analysis.indicators.length);
+    
+    if (!shouldSendBurnoutAlert(analysis)) {
+      console.log('✓ [Burnout] No intervention needed - healthy balance maintained\n');
+      return;
+    }
+    
+    // Determine priority based on risk level
+    let priority: NotificationPriority;
+    let title: string;
+    let emoji: string;
+    
+    if (analysis.riskLevel === 'critical') {
+      priority = NotificationPriority.CRITICAL;
+      title = '🚨 CRITICAL: Burnout Risk Detected!';
+      emoji = '🚨';
+      console.log('🚨 CRITICAL BURNOUT RISK - Sending urgent intervention!');
+    } else if (analysis.riskLevel === 'high') {
+      priority = NotificationPriority.HIGH;
+      title = '🔥 High Burnout Risk Warning';
+      emoji = '🔥';
+      console.log('⚠️ HIGH BURNOUT RISK - Sending warning!');
+    } else {
+      priority = NotificationPriority.MEDIUM;
+      title = '😰 Burnout Warning Signs Detected';
+      emoji = '😰';
+      console.log('⚠️ MODERATE BURNOUT RISK - Sending advisory!');
+    }
+    
+    // Create body with top indicators
+    const topIndicators = analysis.indicators
+      .sort((a, b) => {
+        const severityOrder = { high: 3, moderate: 2, low: 1 };
+        return severityOrder[b.severity] - severityOrder[a.severity];
+      })
+      .slice(0, 2)
+      .map(i => i.description)
+      .join('. ');
+    
+    const body = `${topIndicators}. ${analysis.recommendations[0] || 'Take a break and prioritize rest.'}`;
+    
+    await notificationManager.sendSmart({
+      userId,
+      type: NotificationType.BURNOUT_WARNING,
+      priority,
+      title,
+      body,
+      emoji,
+      color: analysis.riskLevel === 'critical' ? '#EF4444' : '#F59E0B',
+      action: 'VIEW_RECOMMENDATIONS',
+      actionData: {
+        screen: 'Settings',
+        params: { tab: 'wellbeing' },
+      },
+      data: {
+        riskLevel: analysis.riskLevel,
+        riskScore: analysis.riskScore,
+        indicatorCount: analysis.indicators.length,
+        recommendations: analysis.recommendations,
+        indicators: analysis.indicators.map(i => ({
+          type: i.type,
+          severity: i.severity,
+          description: i.description,
+        })),
+      },
+      category: 'burnout_warning',
+    });
+    
+    console.log('✅ [Burnout] Warning sent successfully');
+    console.log('📋 Recommendations provided:', analysis.recommendations.length);
+    console.log('');
+    
+  } catch (error) {
+    console.error('❌ [Burnout] Check failed:', error);
+  }
+}
+
+/**
+ * Run all Phase 2 checks
+ */
+export async function runPhase2Checks(userId: string): Promise<void> {
+  console.log('\n🚀 [PHASE 2 CHECKS] Starting Phase 2 enhancement checks...');
+  
+  await Promise.all([
+    checkPeakTimeReminder(userId),
+    checkBurnoutRisk(userId),
+    // Future: checkAchievements(userId),
+  ]);
+  
+  console.log('✅ [PHASE 2 CHECKS] Complete\n');
+}
+
+/**
+ * Run all checks (Phase 1 + Phase 2)
+ */
+export async function runAllChecks(userId: string): Promise<void> {
+  console.log('\n🎯 [ALL CHECKS] Running comprehensive notification checks...');
+  
+  await runPhase1Checks(userId);
+  await runPhase2Checks(userId);
+  
+  console.log('✅ [ALL CHECKS] All notification checks complete\n');
+}
+
 export default {
+  // Phase 1
   checkDeadlineRisks,
   checkWorkloadAlerts,
   sendMorningBriefing,
   runPhase1Checks,
   initializeNotifications,
   sendTestNotification,
+  // Phase 2
+  checkPeakTimeReminder,
+  checkBurnoutRisk,
+  runPhase2Checks,
+  runAllChecks,
 };

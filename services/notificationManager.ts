@@ -12,8 +12,22 @@ import {
     NotificationPriority,
     NotificationSettings,
     NotificationType,
+    QueuedNotification,
     RateLimitInfo
 } from '../types/notification';
+
+// Phase 3: ML-powered features
+import {
+    enqueueNotification,
+    getBatchReadyNotifications,
+    getQueueStats,
+    initializeNotificationQueue,
+    markNotificationAsSent
+} from './ai/notificationQueue';
+import {
+    initializeOptimalTimePredictor,
+    recordNotificationAnalytics
+} from './ai/optimalTimePredictor';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -73,12 +87,14 @@ Notifications.setNotificationHandler({
 class SmartNotificationManager {
   private rateLimitCache: Map<string, RateLimitInfo> = new Map();
   private initialized: boolean = false;
+  private mlEnabled: boolean = false; // Phase 3 ML features
+  private currentUserId: string | null = null;
 
   /**
-   * Initialize notification system
+   * Initialize notification system with Phase 3 ML
    */
-  async initialize(): Promise<boolean> {
-    if (this.initialized) return true;
+  async initialize(userId?: string): Promise<boolean> {
+    if (this.initialized && (!userId || userId === this.currentUserId)) return true;
 
     try {
       // Request permissions
@@ -102,6 +118,21 @@ class SmartNotificationManager {
 
       // Load rate limit cache
       await this.loadRateLimitCache();
+
+      // Phase 3: Initialize ML features
+      if (userId) {
+        this.currentUserId = userId;
+        try {
+          console.log('🤖 [PHASE 3] Initializing ML features...');
+          await initializeOptimalTimePredictor(userId);
+          await initializeNotificationQueue(userId);
+          this.mlEnabled = true;
+          console.log('✅ [PHASE 3] ML features initialized');
+        } catch (error) {
+          console.error('⚠️ [PHASE 3] ML initialization failed, running in fallback mode:', error);
+          this.mlEnabled = false;
+        }
+      }
 
       this.initialized = true;
       return true;
@@ -552,7 +583,7 @@ class SmartNotificationManager {
       productivityTips: true,
       achievements: true,
       burnoutWarnings: true,
-      peakTimeReminders: false, // Opt-in for Phase 2
+      peakTimeReminders: true, // Phase 2 ML-based feature (enabled by default)
       studyReminders: true,
       breakReminders: false,
       weeklySummary: true,
@@ -571,14 +602,21 @@ class SmartNotificationManager {
    */
   private async trackSent(notificationId: string, notification: Omit<NotificationPayload, 'id' | 'timestamp'>): Promise<void> {
     try {
+      const now = new Date();
       const analytics: NotificationAnalytics = {
         notificationId,
         type: notification.type,
         priority: notification.priority,
-        sentAt: new Date(),
+        sentAt: now,
         opened: false,
         actionTaken: false,
         dismissed: false,
+        
+        // ML Features
+        hourOfDay: now.getHours(),
+        dayOfWeek: now.getDay(),
+        userActiveState: 'idle', // Default state
+        respondedWithinHour: false, // Will be updated when user responds
       };
 
       const key = `${STORAGE_KEYS.ANALYTICS}_${notification.userId}`;
@@ -691,6 +729,359 @@ class SmartNotificationManager {
       ]);
     } catch (error) {
       console.error('Failed to clear user data:', error);
+    }
+  }
+
+  // ========================================
+  // PHASE 3: ML-POWERED FEATURES
+  // ========================================
+
+  /**
+   * Send notification with ML-optimized timing
+   * Uses queue system and optimal time prediction
+   */
+  async sendSmartML(
+    notification: Omit<NotificationPayload, 'id' | 'timestamp'>,
+    options?: {
+      canDelay?: boolean;           // Allow ML to delay for better timing
+      maxDelayHours?: number;       // Maximum delay allowed (default: 6 hours)
+      forceImmediate?: boolean;     // Bypass ML and send immediately
+    }
+  ): Promise<{
+    notificationId: string | null;
+    queued: boolean;
+    scheduledFor?: Date;
+    prediction?: {
+      optimalHour: number;
+      successRate: number;
+      usingML: boolean;
+    };
+  }> {
+    console.log('\n🤖 [PHASE 3 ML] Processing notification with AI optimization...');
+    
+    // Initialize if needed
+    if (!this.initialized) {
+      await this.initialize(notification.userId);
+    }
+
+    // Check if ML is enabled
+    if (!this.mlEnabled || options?.forceImmediate) {
+      console.log('📤 ML disabled or immediate send requested - using traditional method');
+      const id = await this.sendSmart(notification);
+      return {
+        notificationId: id,
+        queued: false,
+      };
+    }
+
+    try {
+      // Get user settings
+      const settings = await this.getSettings(notification.userId);
+      
+      if (!settings.enabled || !this.isTypeEnabled(notification.type, settings)) {
+        console.log('⚠️ Notifications disabled');
+        return { notificationId: null, queued: false };
+      }
+
+      // Check rate limiting
+      const canSend = await this.checkRateLimit(notification, settings);
+      if (!canSend) {
+        console.log('❌ Rate limit exceeded');
+        return { notificationId: null, queued: false };
+      }
+
+      // Create notification payload with ID
+      const fullNotification: NotificationPayload = {
+        ...notification,
+        id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: new Date(),
+      };
+
+      // Critical notifications: send immediately
+      if (notification.priority === NotificationPriority.CRITICAL) {
+        console.log('🚨 CRITICAL priority - sending immediately');
+        const id = await this.send(fullNotification, settings);
+        await this.trackSent(id, fullNotification);
+        await this.updateRateLimit(fullNotification);
+        
+        return {
+          notificationId: id,
+          queued: false,
+        };
+      }
+
+      // ML-powered queuing for non-critical notifications
+      const canDelay = options?.canDelay ?? true;
+      
+      if (canDelay) {
+        console.log('🎯 Using ML to predict optimal send time...');
+        
+        // Add to queue with ML prediction
+        const queuedNotification = await enqueueNotification(
+          fullNotification,
+          true,
+          options?.maxDelayHours
+        );
+        
+        console.log(`✅ Queued for ${queuedNotification.scheduledFor.toLocaleString()}`);
+        console.log(`📊 Predicted success rate: ${(queuedNotification.predictedSuccessRate * 100).toFixed(1)}%`);
+        
+        return {
+          notificationId: fullNotification.id,
+          queued: true,
+          scheduledFor: queuedNotification.scheduledFor,
+          prediction: {
+            optimalHour: queuedNotification.predictedOptimalHour,
+            successRate: queuedNotification.predictedSuccessRate,
+            usingML: true,
+          },
+        };
+      } else {
+        // Send immediately without queuing
+        console.log('📤 Immediate send requested');
+        const id = await this.send(fullNotification, settings);
+        await this.trackSent(id, fullNotification);
+        await this.updateRateLimit(fullNotification);
+        
+        return {
+          notificationId: id,
+          queued: false,
+        };
+      }
+      
+    } catch (error) {
+      console.error('❌ ML send failed, falling back to traditional method:', error);
+      const id = await this.sendSmart(notification);
+      return {
+        notificationId: id,
+        queued: false,
+      };
+    }
+  }
+
+  /**
+   * Process queued notifications (called by background task)
+   * Sends notifications that are ready based on ML-predicted optimal time
+   */
+  async processQueue(): Promise<{
+    sent: number;
+    failed: number;
+    remaining: number;
+  }> {
+    if (!this.mlEnabled) {
+      return { sent: 0, failed: 0, remaining: 0 };
+    }
+
+    console.log('\n🔄 [QUEUE PROCESSOR] Processing queued notifications...');
+    
+    try {
+      // Get ready notifications from queue
+      const readyNotifications = getBatchReadyNotifications(10); // Process up to 10
+      
+      if (readyNotifications.length === 0) {
+        const stats = getQueueStats();
+        console.log(`📊 Queue empty (${stats.total} notifications scheduled for later)`);
+        return { sent: 0, failed: 0, remaining: stats.total };
+      }
+      
+      console.log(`📬 Found ${readyNotifications.length} ready notifications`);
+      
+      let sent = 0;
+      let failed = 0;
+      
+      // Process each notification
+      for (const queuedNotif of readyNotifications) {
+        try {
+          console.log(`📤 Sending: ${queuedNotif.notification.type}`);
+          
+          // Get settings
+          const settings = await this.getSettings(queuedNotif.notification.userId);
+          
+          // Send notification
+          const notificationId = await this.send(queuedNotif.notification, settings);
+          
+          // Track analytics with ML features
+          await this.trackSentML(notificationId, queuedNotif);
+          
+          // Mark as sent in queue
+          await markNotificationAsSent(queuedNotif.id);
+          
+          // Update rate limit
+          await this.updateRateLimit(queuedNotif.notification);
+          
+          sent++;
+          console.log(`✅ Sent successfully (ID: ${notificationId})`);
+          
+        } catch (error) {
+          console.error(`❌ Failed to send notification:`, error);
+          failed++;
+        }
+      }
+      
+      const stats = getQueueStats();
+      console.log(`\n📊 Queue processing complete:`);
+      console.log(`   ✅ Sent: ${sent}`);
+      console.log(`   ❌ Failed: ${failed}`);
+      console.log(`   ⏰ Remaining: ${stats.total}\n`);
+      
+      return {
+        sent,
+        failed,
+        remaining: stats.total,
+      };
+      
+    } catch (error) {
+      console.error('❌ Queue processing failed:', error);
+      return { sent: 0, failed: 0, remaining: 0 };
+    }
+  }
+
+  /**
+   * Track notification sent with ML analytics
+   */
+  private async trackSentML(
+    notificationId: string,
+    queuedNotification: QueuedNotification
+  ): Promise<void> {
+    try {
+      const now = new Date();
+      const notification = queuedNotification.notification;
+      
+      // Create analytics with ML features
+      const analytics: NotificationAnalytics = {
+        notificationId,
+        type: notification.type,
+        priority: notification.priority,
+        sentAt: now,
+        opened: false,
+        actionTaken: false,
+        dismissed: false,
+        
+        // ML Features
+        hourOfDay: now.getHours(),
+        dayOfWeek: now.getDay(),
+        userActiveState: 'idle', // Default, can be enhanced with real-time state
+        respondedWithinHour: false, // Will be updated when user responds
+      };
+      
+      // Save analytics
+      const key = `${STORAGE_KEYS.ANALYTICS}_${notification.userId}`;
+      const existing = await AsyncStorage.getItem(key);
+      const allAnalytics: NotificationAnalytics[] = existing ? JSON.parse(existing) : [];
+      
+      allAnalytics.push(analytics);
+      
+      // Keep last 500 analytics
+      if (allAnalytics.length > 500) {
+        allAnalytics.splice(0, allAnalytics.length - 500);
+      }
+      
+      await AsyncStorage.setItem(key, JSON.stringify(allAnalytics));
+      
+      console.log('📊 [ML ANALYTICS] Tracked notification send');
+      
+    } catch (error) {
+      console.error('Failed to track ML analytics:', error);
+    }
+  }
+
+  /**
+   * Record notification response for ML training
+   */
+  async recordNotificationResponse(
+    notificationId: string,
+    userId: string,
+    opened: boolean,
+    actionTaken: boolean,
+    responseTimeSeconds?: number
+  ): Promise<void> {
+    if (!this.mlEnabled) return;
+    
+    try {
+      // Get existing analytics
+      const key = `${STORAGE_KEYS.ANALYTICS}_${userId}`;
+      const existing = await AsyncStorage.getItem(key);
+      const allAnalytics: NotificationAnalytics[] = existing ? JSON.parse(existing) : [];
+      
+      // Find the notification analytics
+      const analytics = allAnalytics.find(a => a.notificationId === notificationId);
+      
+      if (analytics) {
+        // Update analytics
+        analytics.opened = opened;
+        analytics.openedAt = opened ? new Date() : undefined;
+        analytics.actionTaken = actionTaken;
+        analytics.responseTimeSeconds = responseTimeSeconds;
+        
+        // Calculate if responded within hour
+        if (responseTimeSeconds) {
+          analytics.respondedWithinHour = responseTimeSeconds <= 3600;
+          analytics.engagementScore = this.calculateEngagementScore(
+            responseTimeSeconds,
+            actionTaken
+          );
+        }
+        
+        // Save updated analytics
+        await AsyncStorage.setItem(key, JSON.stringify(allAnalytics));
+        
+        // Send to ML predictor for training
+        await recordNotificationAnalytics(analytics);
+        
+        console.log('🎓 [ML TRAINING] Recorded notification response for training');
+      }
+      
+    } catch (error) {
+      console.error('Failed to record notification response:', error);
+    }
+  }
+
+  /**
+   * Calculate engagement score (0-1) based on response time and action
+   */
+  private calculateEngagementScore(responseTimeSeconds: number, actionTaken: boolean): number {
+    // Fast response = higher score
+    let score = 0;
+    
+    if (responseTimeSeconds <= 300) { // 5 minutes
+      score = 1.0;
+    } else if (responseTimeSeconds <= 1800) { // 30 minutes
+      score = 0.8;
+    } else if (responseTimeSeconds <= 3600) { // 1 hour
+      score = 0.6;
+    } else if (responseTimeSeconds <= 7200) { // 2 hours
+      score = 0.4;
+    } else {
+      score = 0.2;
+    }
+    
+    // Action taken = bonus
+    if (actionTaken) {
+      score = Math.min(1.0, score + 0.2);
+    }
+    
+    return score;
+  }
+
+  /**
+   * Get ML statistics and model performance
+   */
+  async getMLStats(): Promise<any> {
+    if (!this.mlEnabled) {
+      return { enabled: false };
+    }
+    
+    try {
+      const queueStats = getQueueStats();
+      
+      return {
+        enabled: true,
+        queue: queueStats,
+        // Model stats will be added from optimalTimePredictor
+      };
+    } catch (error) {
+      console.error('Failed to get ML stats:', error);
+      return { enabled: false, error: error };
     }
   }
 }

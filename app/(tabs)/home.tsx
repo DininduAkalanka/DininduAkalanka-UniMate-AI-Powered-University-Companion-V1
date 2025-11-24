@@ -13,7 +13,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Dashboard from '../../components/Dashboard.enhanced';
+import Dashboard from '../../components/Dashboard.premium';
 import { getCurrentUser, signOutUser } from '../../services/authService';
 
 const { width } = Dimensions.get('window');
@@ -127,7 +127,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <Dashboard key={refreshKey} userId={userId} />
+      <Dashboard key={refreshKey} userId={userId} bannerStyle="standard" />
       </View>
     </SafeAreaView>
   );
